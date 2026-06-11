@@ -16,8 +16,8 @@
  * - NYTT: valbara mål för modhjul & pitch bend (Off / Chord Size / Inversion)
  * - NYTT: Harmonic & Melodic Minor
  * - NYTT: Reset() städar alla noter vid stop/bypass
+ * - NYTT: Single Chord Mode — mono-läge, ny tangent släpper föregående ackord
  * ==== TO DO ====
- * - Single chord / note additions, toggle
  * ==== IDÉER ====
  * - inversion dispersion för att ta bort enstaka noter??? :)
  * - custom chord voicings: egen matris per tangent i skalan!!!
@@ -67,8 +67,13 @@ function HandleMIDI(event) {
 
   // NOTE ON
   if (event instanceof NoteOn) {
-    // om samma tangent redan håller ett ackord: släpp det först
-    releaseRecord(event.pitch);
+    if (GetParameter("Single Chord Mode") > 0) {
+      // mono: bara ett ackord i taget — släpp allt som låter
+      releaseAllRecords();
+    } else {
+      // om samma tangent redan håller ett ackord: släpp det först
+      releaseRecord(event.pitch);
+    }
 
     var s = getSettings();
     var built = buildChordNotes(event.pitch, event.velocity, s);
@@ -110,6 +115,12 @@ function releaseRecord(inputPitch) {
       activeNotes.splice(i, 1);
       return;
     }
+  }
+}
+
+function releaseAllRecords() {
+  while (activeNotes.length > 0) {
+    releaseRecord(activeNotes[0].inputPitch);
   }
 }
 
@@ -492,6 +503,7 @@ var PluginParameters = [
     defaultValue: 0,
   },
   { name: "Bass Note", type: "checkbox", defaultValue: 0 },
+  { name: "Single Chord Mode", type: "checkbox", defaultValue: 0 },
   {
     name: "Strum (ms)",
     type: "lin",
