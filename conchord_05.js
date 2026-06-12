@@ -578,8 +578,8 @@ var PluginParameters = [
     name: "Chord Size",
     type: "lin",
     minValue: 1,
-    maxValue: 8,
-    numberOfSteps: 7,
+    maxValue: 12,
+    numberOfSteps: 11,
     defaultValue: 4,
   },
   {
@@ -653,3 +653,4 @@ var PluginParameters = [
     defaultValue: 2,
   },
 ];
+ 
