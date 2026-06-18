@@ -1,0 +1,3 @@
+/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/CMakeFiles/juce-populate.dir
+/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/CMakeFiles/edit_cache.dir
+/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,11 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/cmake_install.cmake",
+		"/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-build/cmake_install.cmake",
+		"/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-build/modules/cmake_install.cmake",
+		"/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-build/extras/Build/cmake_install.cmake",
+		"/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-build/extras/Build/juceaide/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

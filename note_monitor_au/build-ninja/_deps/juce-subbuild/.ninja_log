@@ -1,0 +1,21 @@
+# ninja log v7
+1	19	1781710667281470838	juce-populate-prefix/src/juce-populate-stamp/juce-populate-mkdir	a9f5d9ada5409c01
+1	19	1781710667281470838	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-mkdir	a9f5d9ada5409c01
+19	16305	1781710683567914918	juce-populate-prefix/src/juce-populate-stamp/juce-populate-download	8507757bef28245a
+19	16305	1781710683567914918	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-download	8507757bef28245a
+16305	16358	1781710683569042032	juce-populate-prefix/src/juce-populate-stamp/juce-populate-update	36796bc2e8da00d7
+16305	16358	1781710683569042032	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-update	36796bc2e8da00d7
+16359	16376	1781710683639549218	juce-populate-prefix/src/juce-populate-stamp/juce-populate-patch	dd616a5489f355ff
+16359	16376	1781710683639549218	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-patch	dd616a5489f355ff
+16376	16408	1781710683671111043	juce-populate-prefix/src/juce-populate-stamp/juce-populate-configure	9894eef6c3dc16db
+16376	16408	1781710683671111043	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-configure	9894eef6c3dc16db
+16408	16426	1781710683689395045	juce-populate-prefix/src/juce-populate-stamp/juce-populate-build	3fc948f23dd7d668
+16408	16426	1781710683689395045	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-build	3fc948f23dd7d668
+16426	16444	1781710683707340787	juce-populate-prefix/src/juce-populate-stamp/juce-populate-install	5163fb71386e1d4a
+16426	16444	1781710683707340787	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-install	5163fb71386e1d4a
+16444	16460	1781710683723553733	juce-populate-prefix/src/juce-populate-stamp/juce-populate-test	92f465bd85f9b80b
+16444	16460	1781710683723553733	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-test	92f465bd85f9b80b
+16460	16485	1781710683748548086	CMakeFiles/juce-populate-complete	45e647929dd237cc
+16460	16485	1781710683748548086	juce-populate-prefix/src/juce-populate-stamp/juce-populate-done	45e647929dd237cc
+16460	16485	1781710683748548086	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/CMakeFiles/juce-populate-complete	45e647929dd237cc
+16460	16485	1781710683748548086	/Users/barris/Documents/Github/conchord_fx/note_monitor_au/build-ninja/_deps/juce-subbuild/juce-populate-prefix/src/juce-populate-stamp/juce-populate-done	45e647929dd237cc
