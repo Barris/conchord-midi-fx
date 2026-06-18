@@ -1,14 +1,19 @@
 // Logic Conchord v.0.6
 /* ==== CHANGE LOG ====
  * v0.6
- * - NYTT: Modifier Keys — en valbar tangentzon (default C2..B2) tystas
+ * - NYTT: Modifier Keys — en fast tangentzon (B1..G2) tystas
  *         och blir "kryddtangenter" som färgar alla andra ackord:
- *         +0 Sus 2, +1 Sus 4, +2 No 3, +3 6th, +4 7th, +5 9th, +6 Bass,
- *         +7 Drop 2, +8 Spread, +9 Lift (inversion upp, velocity = +1..+3),
- *         +10 Strum (velocity = svephastighet, mjukt = långsamt),
- *         +11 Shimmer (dubblar toppnoten en oktav upp, velocity = styrka)
+ *         +0 Spread, +1 Sus 2, +2 Dim (tvingar förminskat: ♭3 ♭5),
+ *         +3 Sus 4, +4 6th, +5 7th, +6 9th,
+ *         +7 Parallel (momentärt lån: bygg ackord från motsatt skala),
+ *         +8 Strum (velocity = svephastighet, mjukt = långsamt)
+ * - NYTT: Borrow Pairing — vilken "motsats" Parallel lånar från:
+ *         Major / Minor (Ionian<->Aeolian m.fl.) eller Interval Mirror
+ *         (vänd intervallsträngen: Ionian<->Phrygian, Dorian<->Dorian)
  * - NYTT: Modifier Mode Hold/Latch — Latch togglar per tryck (enhandsspel)
  * - NYTT: modifiers stackar och morphar hållna ackord live
+ * - ÄNDRAT: släpp av en modifier är rent subtraktivt — bara tillagda toner
+ *           tystas, originaltonerna återanslås (retriggas) aldrig
  * - NYTT: zonkartan skrivs till Scripter-konsolen när zonen ändras
  * v0.5
  * - NYTT: Single Chord Mode retriggar som en monosynt (last-note priority):
@@ -40,11 +45,15 @@
  * - NYTT: Reset() städar alla noter vid stop/bypass
  * - NYTT: Single Chord Mode — mono-läge, ny tangent släpper föregående ackord
  * ==== TO DO ====
- * ==== IDÉER ====
- * - inversion dispersion för att ta bort enstaka noter??? :)
- * - custom chord voicings: egen matris per tangent i skalan!!!
- * - latch-läge (håll ackordet tills nästa tangent)
- * - modifier-zon: egna kartor (användarvald modifier per tangent)?
+ * - single chord mode -- free play extra notes
+ * - out of scale keys -- parallel mode / down or up, dim mode, dim chords down
+ * - Chord size till Max Chord Size (kanske också min, en range?)
+ * - Inversion till Inversion Range
+ * ==== BUGGAR ====
+ * - svårt att nå chord size 3 på pitch mod, verkar var felmappat???
+ * - räkna med bass note i chord size
+ * - Strum ms enbart vid strum mod
+ * - dim-ackordnoter hoppar ibland en oktav uppåt
  */
 
 var NeedsTimingInfo = true; // krävs för sendAfterMilliseconds
@@ -171,10 +180,13 @@ function HandleMIDI(event) {
 
 // ===== MODIFIER KEYS =====
 
+// Kryddzonen är fast: börjar på B1 och spänner exakt över antalet kryddtangenter
+// (B1..G2 enligt README). Inte längre inställbar — gamla preset kan annars ligga
+// kvar på en felaktig range och ge döda tangenter.
+var MOD_ZONE_LOW = 47; // B1
+
 function getModifierZone() {
-  var a = GetParameter("Mod Zone Low");
-  var b = GetParameter("Mod Zone High");
-  return { lo: Math.min(a, b), hi: Math.max(a, b) };
+  return { lo: MOD_ZONE_LOW, hi: MOD_ZONE_LOW + ZONE_MODIFIERS.length - 1 };
 }
 
 function isInModifierZone(pitch) {
@@ -185,28 +197,50 @@ function isInModifierZone(pitch) {
 
 function handleModifierKey(event) {
   var zone = getModifierZone();
-  var idx = (event.pitch - zone.lo) % ZONE_MODIFIERS.length;
+  // ingen wrap: tangenter bortom sista kryddan gör inget (zonen kan vara bredare)
+  var idx = event.pitch - zone.lo;
+  if (idx < 0 || idx >= ZONE_MODIFIERS.length) return;
   var isOff =
     event instanceof NoteOff ||
     (event instanceof NoteOn && event.velocity === 0);
 
+  var turnedOff;
   if (GetParameter("Modifier Mode") === 1) {
     // Latch: varje tryck togglar, släpp ignoreras
     if (isOff) return;
-    if (activeModifiers[idx]) delete activeModifiers[idx];
-    else activeModifiers[idx] = { velocity: event.velocity };
+    if (activeModifiers[idx]) {
+      delete activeModifiers[idx];
+      turnedOff = true;
+    } else {
+      activeModifiers[idx] = { velocity: event.velocity };
+      turnedOff = false;
+    }
   } else {
     // Hold: aktiv så länge tangenten hålls
-    if (isOff) delete activeModifiers[idx];
-    else activeModifiers[idx] = { velocity: event.velocity };
+    if (isOff) {
+      delete activeModifiers[idx];
+      turnedOff = true;
+    } else {
+      activeModifiers[idx] = { velocity: event.velocity };
+      turnedOff = false;
+    }
   }
 
-  updateAllActiveChords(); // hållna ackord morphar direkt
+  // hållna ackord morphar direkt; vid släpp bara tysta tillagda toner
+  updateAllActiveChords(turnedOff);
 }
 
-// Kryddorna i zonordning, nedifrån och upp. apply muterar settings-objektet;
-// vel är kryddtangentens anslag (1-127) för de velocity-känsliga.
+// Kryddorna i zonordning, nedifrån och upp (idx 0 = lägsta tangenten i zonen).
+// apply muterar settings-objektet; vel är kryddtangentens anslag (1-127) för
+// de velocity-känsliga. Längden här = antalet kryddtangenter; zonen är fast
+// och börjar på B1 (se MOD_ZONE_LOW), så B1..G2 med dagens 9 kryddor.
 var ZONE_MODIFIERS = [
+  {
+    name: "Spread",
+    apply: function (s, vel) {
+      s.voicing = "Spread";
+    },
+  },
   {
     name: "Sus 2",
     apply: function (s, vel) {
@@ -214,15 +248,15 @@ var ZONE_MODIFIERS = [
     },
   },
   {
-    name: "Sus 4",
-    apply: function (s, vel) {
-      s.colorName = "Sus4";
-    },
-  },
-  {
     name: "Dim", // tvingar förminskat ackord: liten ters (+3) och förminskad kvint (+6)
     apply: function (s, vel) {
       s.dim = true;
+    },
+  },
+  {
+    name: "Sus 4",
+    apply: function (s, vel) {
+      s.colorName = "Sus4";
     },
   },
   {
@@ -247,24 +281,6 @@ var ZONE_MODIFIERS = [
     },
   },
   {
-    name: "Strum", // anslaget styr svephastigheten: mjukt = långsamt, hårt = tajt
-    apply: function (s, vel) {
-      s.strumMs = Math.round(90 - (vel / 127) * 75); // 90..15 ms per ton
-    },
-  },
-  {
-    name: "Lift", // inversion uppåt, anslaget styr hur långt (+1..+3)
-    apply: function (s, vel) {
-      s.inversionPerf += 1 + Math.floor(vel / 43);
-    },
-  },
-  {
-    name: "Spread",
-    apply: function (s, vel) {
-      s.voicing = "Spread";
-    },
-  },
-  {
     name: "Parallel", // momentärt lån: bygg ackord från motsatt skala (samma grundton)
     apply: function (s, vel) {
       var curName = SCALE_KEYS[GetParameter("Scale")];
@@ -274,6 +290,12 @@ var ZONE_MODIFIERS = [
           : MODE_OPPOSITES_MAJORMINOR;
       var oppName = table[curName] || curName;
       s.scaleSteps = SCALE_TEMPLATES[oppName];
+    },
+  },
+  {
+    name: "Strum", // anslaget styr svephastigheten: mjukt = långsamt, hårt = tajt
+    apply: function (s, vel) {
+      s.strumMs = Math.round(90 - (vel / 127) * 75); // 90..15 ms per ton
     },
   },
 ];
@@ -376,11 +398,9 @@ function releaseAllRecords() {
 }
 
 function ParameterChanged(param, value) {
-  // zonändring kan lämna modifiers hängande -> rensa och visa nya kartan
+  // av/på eller läge kan lämna modifiers hängande -> rensa och visa kartan
   if (
     param === PARAM_INDEX["Modifier Keys"] ||
-    param === PARAM_INDEX["Mod Zone Low"] ||
-    param === PARAM_INDEX["Mod Zone High"] ||
     param === PARAM_INDEX["Modifier Mode"]
   ) {
     activeModifiers = {};
@@ -430,7 +450,9 @@ function sendNoteOff(pitch, channel, delayMs) {
 
 // ===== LIVE-UPPDATERING AV HÅLLNA ACKORD =====
 
-function updateAllActiveChords() {
+// suppressAdd: släpp av en modifier ska bara tysta tillagda toner — aldrig
+// återanslå (retrigga) originaltonerna eller fylla i toner som inte redan låter.
+function updateAllActiveChords(suppressAdd) {
   if (activeNotes.length === 0) return;
   var s = getSettings();
 
@@ -450,13 +472,14 @@ function updateAllActiveChords() {
       }
     }
 
-    // NoteOn för nya toner, behåll delay på de som redan låter
+    // NoteOn för nya toner, behåll delay på de som redan låter.
+    // Vid släpp (suppressAdd) hoppar vi över toner som inte redan låter.
     var updated = [];
     for (var j = 0; j < newNotes.length; j++) {
       var existing = findNote(newNotes[j].pitch, record.notes);
       if (existing) {
         updated.push(existing);
-      } else {
+      } else if (!suppressAdd) {
         sendNoteOn(newNotes[j].pitch, newNotes[j].velocity, record.channel, 0);
         updated.push({ pitch: newNotes[j].pitch, delay: 0 });
       }
@@ -485,9 +508,9 @@ function getSettings() {
   var s = {};
   s.key = GetParameter("Key");
   s.scaleSteps = SCALE_TEMPLATES[SCALE_KEYS[GetParameter("Scale")]];
-  s.baseDegrees =
-    CHORD_BASE_TYPES[CHORD_BASE_TYPE_NAMES[GetParameter("Chord Type")]];
-  s.colorName = CHORD_COLOR_NAMES[GetParameter("Color")];
+  // bas: vanlig treklang utan färg — kryddtangenterna (6th/7th/9th, Sus/Dim) styr resten
+  s.baseDegrees = CHORD_BASE_TYPES["Triad"];
+  s.colorName = "Plain";
   s.size = GetParameter("Chord Size");
   s.inversion = GetParameter("Inversion"); // UI-slidern
   s.inversionPerf = 0; // offset från modhjul/pitch bend — hoppas över för 1-notsackord
@@ -565,10 +588,14 @@ function buildChordNotes(inputPitch, velocity, s) {
       scalePCs[wrappedDegree] - scalePCs[baseDegree] + 12 * octaveOffset;
     var pitch = root + intervalFromBase;
     if (s.dim) {
-      // tvinga förminskat: liten ters och förminskad kvint, oavsett skalgrad
+      // tvinga förminskat: liten ters (+3) och förminskad kvint (+6), oavsett skalgrad.
+      // använd intervallets EGEN oktav (halvtoner), inte skalstegens — annars hoppar
+      // tonen en oktav upp när grundtonen är en hög skalgrad och steget wrappar
       var dp = (deg - 1) % 7;
-      if (dp === 2) pitch = root + 3 + 12 * octaveOffset; // ♭3
-      else if (dp === 4) pitch = root + 6 + 12 * octaveOffset; // ♭5
+      var oct = Math.floor(intervalFromBase / 12);
+      if (dp === 2)
+        pitch = root + 3 + 12 * oct; // ♭3
+      else if (dp === 4) pitch = root + 6 + 12 * oct; // ♭5
     }
     chord.push(pitch);
   }
@@ -773,10 +800,8 @@ var CHORD_BASE_TYPES = {
   "13th": [1, 3, 5, 7, 9, 11, 13],
 };
 
-var CHORD_COLOR_NAMES = ["Plain", "Sus2", "Sus4", "No 3"];
 var VOICING_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4", "Spread"];
 
-var CHORD_BASE_TYPE_NAMES = Object.keys(CHORD_BASE_TYPES);
 var SCALE_KEYS = Object.keys(SCALE_TEMPLATES);
 var CHROMATIC_SCALE_STRINGS = [
   "C",
@@ -798,10 +823,6 @@ function noteName(pitch) {
   return CHROMATIC_SCALE_STRINGS[pitch % 12] + (Math.floor(pitch / 12) - 2);
 }
 
-// notnamn för zon-menyerna (menyindex = MIDI-pitch)
-var NOTE_MENU_NAMES = [];
-for (var p = 0; p < 128; p++) NOTE_MENU_NAMES.push(noteName(p));
-
 var PluginParameters = [
   {
     name: "Key",
@@ -810,18 +831,6 @@ var PluginParameters = [
     defaultValue: 0,
   },
   { name: "Scale", type: "menu", valueStrings: SCALE_KEYS, defaultValue: 0 },
-  {
-    name: "Chord Type",
-    type: "menu",
-    valueStrings: CHORD_BASE_TYPE_NAMES,
-    defaultValue: 0,
-  },
-  {
-    name: "Color",
-    type: "menu",
-    valueStrings: CHORD_COLOR_NAMES,
-    defaultValue: 0,
-  },
   {
     name: "Chord Size",
     type: "lin",
@@ -875,18 +884,6 @@ var PluginParameters = [
     defaultValue: 2,
   },
   { name: "Modifier Keys", type: "checkbox", defaultValue: 1 },
-  {
-    name: "Mod Zone Low",
-    type: "menu",
-    valueStrings: NOTE_MENU_NAMES,
-    defaultValue: 48, // C2
-  },
-  {
-    name: "Mod Zone High",
-    type: "menu",
-    valueStrings: NOTE_MENU_NAMES,
-    defaultValue: 57, // A2 (10 kryddtangenter C2..A2)
-  },
   {
     name: "Modifier Mode",
     type: "menu",
