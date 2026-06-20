@@ -3,10 +3,6 @@
  * v0.6
  * - NYTT: Modifier Keys — en fast tangentzon (B1..G2) tystas
  *         och blir "kryddtangenter" som färgar alla andra ackord:
- *         +0 Spread, +1 Sus 2, +2 Dim (tvingar förminskat: ♭3 ♭5),
- *         +3 Sus 4, +4 6th, +5 7th, +6 9th,
- *         +7 Parallel (momentärt lån: bygg ackord från motsatt skala),
- *         +8 Strum (velocity = svephastighet, mjukt = långsamt)
  * - NYTT: Borrow Pairing — vilken "motsats" Parallel lånar från:
  *         Major / Minor (Ionian<->Aeolian m.fl.) eller Interval Mirror
  *         (vänd intervallsträngen: Ionian<->Phrygian, Dorian<->Dorian)
@@ -49,11 +45,13 @@
  * - out of scale keys -- parallel mode / down or up, dim mode, dim chords down
  * - Chord size till Max Chord Size (kanske också min, en range?)
  * - Inversion till Inversion Range
+ * - Lägg till transpose-funktion på output
  * ==== BUGGAR ====
  * - svårt att nå chord size 3 på pitch mod, verkar var felmappat???
- * - räkna med bass note i chord size
+ * - räkna med bass note som första not i chord size
  * - Strum ms enbart vid strum mod
- * - dim-ackordnoter hoppar ibland en oktav uppåt
+ * - fixa ordning på mod tangenter
+ * - ändra mod inversion-beteende, standard i mitten, släpp tangenter med sweep up to down, drop med mod down
  */
 
 var NeedsTimingInfo = true; // krävs för sendAfterMilliseconds
@@ -180,10 +178,10 @@ function HandleMIDI(event) {
 
 // ===== MODIFIER KEYS =====
 
-// Kryddzonen är fast: börjar på B1 och spänner exakt över antalet kryddtangenter
-// (B1..G2 enligt README). Inte längre inställbar — gamla preset kan annars ligga
+// Kryddzonen är fast: börjar på C2 och spänner exakt över antalet kryddtangenter
+// och räknar uppåt därifrån. Inte inställbar — gamla preset kan annars ligga
 // kvar på en felaktig range och ge döda tangenter.
-var MOD_ZONE_LOW = 47; // B1
+var MOD_ZONE_LOW = 48; // C2
 
 function getModifierZone() {
   return { lo: MOD_ZONE_LOW, hi: MOD_ZONE_LOW + ZONE_MODIFIERS.length - 1 };
@@ -234,13 +232,20 @@ function handleModifierKey(event) {
 // apply muterar settings-objektet; vel är kryddtangentens anslag (1-127) för
 // de velocity-känsliga. Längden här = antalet kryddtangenter; zonen är fast
 // och börjar på B1 (se MOD_ZONE_LOW), så B1..G2 med dagens 9 kryddor.
+// Lägg till en skalgrad i baskackordet utan att skriva över de andra, så att
+// flera extension-modifiers (6th/7th/Add 9) stackar additivt. Skapar alltid en
+// NY array (muterar aldrig den delade Triad-mallen) och växer Chord Size så att
+// alla grader får plats (extendDegreesForNumNotes trunkerar annars).
+function addDegree(s, deg) {
+  if (s.baseDegrees.indexOf(deg) === -1) {
+    s.baseDegrees = s.baseDegrees.concat([deg]).sort(function (a, b) {
+      return a - b;
+    });
+  }
+  if (s.size < s.baseDegrees.length) s.size = s.baseDegrees.length;
+}
+
 var ZONE_MODIFIERS = [
-  {
-    name: "Spread",
-    apply: function (s, vel) {
-      s.voicing = "Spread";
-    },
-  },
   {
     name: "Sus 2",
     apply: function (s, vel) {
@@ -262,22 +267,26 @@ var ZONE_MODIFIERS = [
   {
     name: "6th",
     apply: function (s, vel) {
-      s.baseDegrees = CHORD_BASE_TYPES["6th"];
-      if (s.size < 4) s.size = 4;
+      addDegree(s, 6);
     },
   },
   {
     name: "7th",
     apply: function (s, vel) {
-      s.baseDegrees = CHORD_BASE_TYPES["7th"];
-      if (s.size < 4) s.size = 4;
+      addDegree(s, 7);
     },
   },
   {
-    name: "9th",
+    name: "Dom 7", // tvingar dominant7: dur-ters (+4), ren kvint (+7), liten septim (+10)
     apply: function (s, vel) {
-      s.baseDegrees = CHORD_BASE_TYPES["9th"];
-      if (s.size < 5) s.size = 5;
+      s.dom7 = true;
+      if (s.size < 4) s.size = 4; // annars hörs ingen septim
+    },
+  },
+  {
+    name: "Add 9", // lägger till nian additivt (utan att tvinga in septim)
+    apply: function (s, vel) {
+      addDegree(s, 9);
     },
   },
   {
@@ -290,12 +299,6 @@ var ZONE_MODIFIERS = [
           : MODE_OPPOSITES_MAJORMINOR;
       var oppName = table[curName] || curName;
       s.scaleSteps = SCALE_TEMPLATES[oppName];
-    },
-  },
-  {
-    name: "Strum", // anslaget styr svephastigheten: mjukt = långsamt, hårt = tajt
-    apply: function (s, vel) {
-      s.strumMs = Math.round(90 - (vel / 127) * 75); // 90..15 ms per ton
     },
   },
 ];
@@ -522,6 +525,7 @@ function getSettings() {
   s.outOfScale = GetParameter("Out-of-Scale Keys"); // 0=Mute 1=Pass 2=Snap
   s.shimmer = 0; // 0..1, sätts av Shimmer-modifiern
   s.dim = false; // sätts av Dim-modifiern: tvingar förminskat ackord
+  s.dom7 = false; // sätts av Dom 7-modifiern: tvingar dominant7-ackord
 
   // modifier-tangenter kryddar ovanpå reglagen (i zonordning, senare vinner)
   // — före hjul/bend så att Chord Size-hjulet fortfarande kan skala storleken
@@ -588,14 +592,19 @@ function buildChordNotes(inputPitch, velocity, s) {
       scalePCs[wrappedDegree] - scalePCs[baseDegree] + 12 * octaveOffset;
     var pitch = root + intervalFromBase;
     if (s.dim) {
-      // tvinga förminskat: liten ters (+3) och förminskad kvint (+6), oavsett skalgrad.
-      // använd intervallets EGEN oktav (halvtoner), inte skalstegens — annars hoppar
-      // tonen en oktav upp när grundtonen är en hög skalgrad och steget wrappar
-      var dp = (deg - 1) % 7;
-      var oct = Math.floor(intervalFromBase / 12);
-      if (dp === 2)
-        pitch = root + 3 + 12 * oct; // ♭3
-      else if (dp === 4) pitch = root + 6 + 12 * oct; // ♭5
+      // tvinga förminskat: ett symmetriskt staplat torn av små terser (+3 per
+      // ackordton), oavsett skalgrad. i är ackordtonens stapelindex (treklang),
+      // så ton 0,1,2,3,... hamnar på +0,+3,+6,+9,... — en äkta dim-stapel.
+      // (Tidigare flyttades bara 3:an/5:an till ♭3/♭5 medan oktavtonen, deg 8,
+      // låg kvar på +12 i stället för dim7 +9 — därför hoppade topptonen en
+      // oktav upp så fort ackordet hade fler än tre noter.)
+      pitch = root + 3 * i;
+    } else if (s.dom7) {
+      // tvinga dominant7: dur-ters (+4), ren kvint (+7), liten septim (+10),
+      // oavsett skalgrad. Mönstret upprepas per oktav (i % 4 + oktavlyft) så
+      // högre ackordtoner staplar 9/11/13 ovanpå utan att topptonen hoppar.
+      var DOM7 = [0, 4, 7, 10];
+      pitch = root + DOM7[i % 4] + 12 * Math.floor(i / 4);
     }
     chord.push(pitch);
   }
@@ -733,8 +742,12 @@ function applyVoicing(chordPitches, voicingName) {
     chord[len - 2] -= 12;
     chord[len - 4] -= 12;
   } else if (voicingName === "Spread" && len >= 3) {
-    // varannan ton uppifrån räknat sänks en oktav
-    for (var i = len - 2; i >= 0; i -= 2) {
+    // varannan ton NEDIFRÅN räknat sänks en oktav (index 1,3,5...).
+    // Ankras nedifrån så att grundton och lägre ackordtoner ligger kvar när
+    // ackordet växer uppåt — annars flippar pariteten på vilka toner som
+    // sänks så fort nottalet ändras, och ett treklang->septim-morf skulle
+    // byta oktav på ALLA toner (retrigga allt) i stället för att lägga till en.
+    for (var i = 1; i < len; i += 2) {
       chord[i] -= 12;
     }
   }
