@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Conchord — interaktiv prototyp</title>
+<style>
+  :root{
+    --stage:#e9e7e0; --panel:#0c1110; --panel2:#121a18; --panel3:#0f1715;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --teal:#5fe3b3; --teal2:#3fbf95; --tealdim:#1d3a31;
+    --text:#e9f1ec; --muted:#8ba398; --faint:#5e7068; --amber:#e3b15f;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--stage);font-family:var(--sans);color:var(--text);padding:32px;display:flex;flex-direction:column;align-items:center;gap:14px}
+  .caption{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#6b6b66;max-width:1000px;width:100%}
+  .caption b{color:#3a3a36;font-weight:600}
+  .plugin{width:1000px;max-width:100%;background:var(--panel);border-radius:18px;border:1px solid #1c2a26;overflow:hidden}
+  .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .faint{color:var(--faint)}
+  .hdr{display:flex;align-items:center;justify-content:space-between;padding:20px 26px 8px}
+  .brand{font-weight:700;font-size:22px;letter-spacing:.04em}
+  .brand small{font-family:var(--mono);font-size:11px;letter-spacing:.22em;color:var(--teal);margin-left:10px;font-weight:400}
+  .preset{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:6px 12px}
+  .preset select{background:transparent;border:0;color:var(--text);font-weight:600;font-size:14px;outline:none}
+  .tabs{display:flex;gap:10px;padding:8px 26px 16px}
+  .tab{padding:12px 22px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);font-weight:700;letter-spacing:.04em;cursor:pointer;font-size:14px}
+  .tab.on{background:var(--teal);color:#06241b;border-color:var(--teal);box-shadow:0 0 22px rgba(95,227,179,.25)}
+  .tab.stub{position:relative}
+  .tab.stub::after{content:"snart";position:absolute;top:-7px;right:-6px;font-family:var(--mono);font-size:9px;letter-spacing:.1em;background:#2a2320;color:var(--amber);border-radius:6px;padding:1px 5px}
+  .body{display:grid;grid-template-columns:1fr 340px;gap:16px;padding:0 26px 8px}
+  .card{background:var(--panel3);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .viewer{min-height:240px;display:flex;flex-direction:column;position:relative}
+  .viewer-top{display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:16px}
+  .keyscale{cursor:pointer}
+  .keyscale:hover{color:var(--teal)}
+  .kspop{position:absolute;top:40px;right:14px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+  .kspop .fld{display:flex;align-items:center;justify-content:space-between;gap:14px}
+  .kspop select{background:var(--panel3);border:1px solid var(--line2);border-radius:8px;color:var(--text);padding:6px 9px;font-weight:600;font-size:13px;outline:none}
+  .chordname{font-size:74px;font-weight:700;line-height:.95;margin:8px 0 6px;letter-spacing:-.01em}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .chip{font-family:var(--mono);font-weight:600;font-size:15px;color:var(--teal);background:var(--tealdim);border:1px solid #2a5447;border-radius:8px;padding:6px 11px}
+  .bars{display:flex;align-items:flex-end;gap:5px;height:54px;margin-top:auto}
+  .bars .bar{width:10px;background:var(--teal2);border-radius:2px;opacity:.85}
+  .bars .bar.ghost{opacity:.22}
+  .ctl{display:flex;flex-direction:column;gap:16px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .val{font-family:var(--mono);font-weight:600;font-size:15px;color:var(--text)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;background:#24332e;outline:none}
+  input[type=range]:disabled{opacity:.4}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--teal);cursor:pointer;box-shadow:0 0 10px rgba(95,227,179,.5)}
+  .slider{display:flex;flex-direction:column;gap:9px}
+  .ctl select{background:var(--panel2);border:1px solid var(--line2);border-radius:9px;color:var(--text);padding:7px 10px;font-weight:600;font-size:14px;outline:none}
+  .seg{display:flex;justify-content:space-between;align-items:center}
+  .tbd{font-family:var(--mono);font-size:9px;letter-spacing:.08em;background:#2a2320;color:var(--amber);border-radius:5px;padding:1px 6px;margin-left:6px;text-transform:none}
+  .toggle{width:46px;height:26px;border-radius:14px;background:#24332e;border:1px solid var(--line2);position:relative;cursor:pointer;transition:.15s;flex:0 0 auto}
+  .toggle::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#7c8e87;transition:.15s}
+  .toggle.on{background:var(--teal)}
+  .toggle.on::after{left:22px;background:#06241b}
+  .divider{height:1px;background:var(--line);margin:2px 0}
+  .kbwrap{padding:14px 26px 22px}
+  .kbhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .kbhead .left{display:flex;align-items:center;gap:12px}
+  .kbrow{display:flex;gap:16px;align-items:stretch}
+  .perf{display:flex;gap:10px;flex:0 0 auto}
+  .wheel{display:flex;flex-direction:column;align-items:center;gap:6px;width:48px}
+  .wname{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--muted)}
+  .wtrack{position:relative;width:34px;flex:1;background:#0a1410;border:1px solid var(--line2);border-radius:8px;cursor:ns-resize;touch-action:none}
+  .wcenter{position:absolute;left:3px;right:3px;top:50%;height:1px;background:var(--line2)}
+  .wthumb{position:absolute;left:3px;right:3px;height:16px;border-radius:5px;background:var(--teal);box-shadow:0 0 10px rgba(95,227,179,.5)}
+  .wthumb.untouched{background:#3a5e53;box-shadow:none}
+  .wsub{font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--teal);text-align:center;line-height:1.35}
+  .wsub b{color:var(--text);font-weight:700}
+  .kbcol{flex:1;min-width:0;display:flex;flex-direction:column}
+  .kb-scroll{overflow:hidden;border-radius:6px}
+  .kb{position:relative;height:160px}
+  .wk{position:absolute;bottom:0;background:linear-gradient(#f4f6f3,#d9ded9);border:1px solid #2a2a2a;border-radius:0 0 5px 5px;cursor:pointer}
+  .wk.zone{background:linear-gradient(#0f2a22,#0a1f19);border-color:#1d4f40}
+  .wk.ghost{background:linear-gradient(rgba(95,227,179,.2),rgba(55,184,140,.2));border-color:rgba(95,227,179,.28)}
+  .wk.lit{background:linear-gradient(rgba(95,227,179,.5),rgba(55,184,140,.5));border-color:rgba(95,227,179,.55)}
+  .wk.root{background:linear-gradient(var(--teal),#37b88c);border-color:var(--teal)}
+  .bk{position:absolute;top:0;background:linear-gradient(#2a2a2a,#101010);border:1px solid #000;border-radius:0 0 4px 4px;cursor:pointer;z-index:2}
+  .bk.zone{background:linear-gradient(#16493b,#0c2c24);border-color:#1d4f40}
+  .bk.ghost{background:linear-gradient(rgba(95,227,179,.24),rgba(44,158,119,.24))}
+  .bk.lit{background:linear-gradient(rgba(95,227,179,.5),rgba(44,158,119,.5))}
+  .bk.root{background:linear-gradient(var(--teal),#2c9e77)}
+  .klabel{position:absolute;font-family:var(--mono);font-size:9px;letter-spacing:.02em;text-align:center;pointer-events:none}
+  .zonehandle{position:absolute;top:0;height:18px;background:rgba(95,227,179,.9);border-radius:0 0 6px 6px;z-index:6;cursor:grab;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .zonehandle:active{cursor:grabbing}
+  .zonehandle span{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:#06241b;font-weight:700;white-space:nowrap}
+  .kbfoot{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+  .karrow{width:40px;height:28px;border-radius:8px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);cursor:pointer;font-size:15px}
+  .karrow:active{background:var(--panel3)}
+  .modnow{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--teal);min-height:14px;margin-top:8px}
+  .setup-body{display:grid;grid-template-columns:1fr 360px;gap:16px;padding:8px 26px 26px}
+  .route{background:var(--panel3);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+  .route-top{display:flex;align-items:center;justify-content:space-between}
+  .route-top .name{font-weight:700;font-size:17px}
+  .pill{font-family:var(--mono);font-size:12px;font-weight:600;background:var(--teal);color:#06241b;border-radius:9px;padding:6px 12px;border:0}
+  .pill.ghost{background:var(--panel2);color:var(--muted);border:1px solid var(--line2)}
+  .route-opts{display:flex;gap:8px;margin-top:12px}
+  .map{background:var(--panel3);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .map-row{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:9px;margin-bottom:4px}
+  .map-row.white{background:var(--panel2)}
+  .map-row .k{font-family:var(--mono);font-weight:700;color:var(--teal)}
+  .map-row.black .k{color:var(--muted)}
+  .map-row .m{font-weight:600}
+  .stublink{cursor:pointer;color:var(--teal);font-family:var(--mono);font-size:12px}
+  .flipbtn{cursor:pointer}
+  [hidden]{display:none !important}
+  .legend{max-width:1000px;width:100%;font-size:13px;color:#5a5a55;line-height:1.6}
+  .legend code{font-family:var(--mono);background:#dcdad3;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<div class="caption"><b>Conchord prototyp</b> &nbsp;·&nbsp; v0.9-motorn portad &nbsp;·&nbsp; layout &amp; funktion före färdig design</div>
+
+<div class="plugin">
+
+  <section id="play">
+    <div class="hdr">
+      <div class="brand">CONCHORD<small>CHORD ENGINE</small></div>
+      <div class="preset"><span class="lbl">Preset</span>
+        <select id="preset"><option value="">—</option><option>Harp</option><option>Piano</option><option>Pad</option><option>Pluck</option></select>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab on" data-mode="CHORD">CHORD</div>
+      <div class="tab" data-mode="HARP">HARP</div>
+      <div class="tab stub" data-mode="2-FINGER">2-FINGER</div>
+      <div class="tab stub" data-mode="JAZZ">JAZZ</div>
+    </div>
+
+    <div class="body">
+      <div class="card viewer">
+        <div class="viewer-top"><span class="lbl">Chord viewer</span><span class="lbl keyscale" id="keyscale"><span id="ksText">C IONIAN</span> ▾</span></div>
+        <div class="kspop" id="kspop" hidden>
+          <div class="fld"><span class="lbl">Key</span><select id="keySel"></select></div>
+          <div class="fld"><span class="lbl">Scale</span><select id="scaleSel"></select></div>
+        </div>
+        <div class="chordname" id="cname">C</div>
+        <div class="chips" id="chips"></div>
+        <div class="lbl" id="cdesc">MAJOR · CLOSE</div>
+        <div class="bars" id="bars"></div>
+      </div>
+
+      <div class="card ctl">
+        <div class="slider">
+          <div class="row"><span class="lbl">Chord size</span><span class="val" id="vSize">4</span></div>
+          <input type="range" id="size" min="1" max="8" step="1" value="4">
+        </div>
+        <div class="slider">
+          <div class="row"><span class="lbl">Inversion</span><span class="val" id="vInv">0</span></div>
+          <input type="range" id="inv" min="-6" max="6" step="1" value="0">
+        </div>
+        <div class="slider" id="ctlHumanize">
+          <div class="row"><span class="lbl">Humanize <span class="tbd">to be designed</span></span><span class="val faint">—</span></div>
+          <input type="range" min="0" max="100" step="1" value="0" disabled>
+        </div>
+        <div class="slider" id="ctlStrum" hidden>
+          <div class="row"><span class="lbl">Strum</span><span class="val" id="vStrum">0 ms</span></div>
+          <input type="range" id="strum" min="0" max="200" step="1" value="0">
+        </div>
+        <div class="divider"></div>
+        <div class="seg"><span class="lbl">Voicing</span><select id="voicing"></select></div>
+        <div class="seg"><span class="lbl">Out-of-scale</span>
+          <select id="oos"><option value="0">Mute</option><option value="1">Pass</option><option value="2" selected>Snap</option><option value="3">Dim</option></select></div>
+        <div class="seg"><span class="lbl">Bass note</span><div class="toggle" id="bass" role="switch" aria-checked="false"></div></div>
+      </div>
+    </div>
+
+    <div class="kbwrap">
+      <div class="kbhead">
+        <div class="left"><div class="toggle on" id="modkeys" role="switch" aria-checked="true"></div>
+          <span class="lbl">Mod zone · klick = krydda · dra handtaget = flytta</span></div>
+        <span class="lbl faint stublink flipbtn" id="toSetup">setup ▸</span>
+      </div>
+
+      <div class="kbrow">
+        <div class="perf">
+          <div class="wheel">
+            <div class="wname">PITCH</div>
+            <div class="wtrack" id="pbtrack"><div class="wcenter"></div><div class="wthumb untouched" id="pbthumb"></div></div>
+            <div class="wsub" id="pbsub">→ SIZE</div>
+          </div>
+          <div class="wheel">
+            <div class="wname">MOD</div>
+            <div class="wtrack" id="mwtrack"><div class="wthumb untouched" id="mwthumb"></div></div>
+            <div class="wsub" id="mwsub">→ INV</div>
+          </div>
+        </div>
+
+        <div class="kbcol">
+          <div class="kb-scroll" id="kbscroll"><div class="kb" id="kb"></div></div>
+          <div class="kbfoot">
+            <span class="lbl" id="zonelabel">Mod zone: C2–G#2</span>
+            <span style="display:flex;gap:8px">
+              <button class="karrow" id="scrollL" aria-label="scrolla vänster">◀</button>
+              <button class="karrow" id="scrollR" aria-label="scrolla höger">▶</button>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="modnow" id="modnow"></div>
+    </div>
+  </section>
+
+  <section id="setup" hidden>
+    <div class="hdr">
+      <div class="brand">CONCHORD<small>SETUP</small></div>
+      <button class="pill flipbtn" id="toPlay">↩ FLIP TO PLAY</button>
+    </div>
+    <div class="setup-body">
+      <div>
+        <div class="lbl" style="margin:6px 0 12px">Performance routing</div>
+        <div class="route">
+          <div class="route-top"><span class="name">Pitch Bend</span><span class="pill">→ Chord Size</span></div>
+          <div class="route-opts"><button class="pill ghost">Latch ●</button><button class="pill ghost">Reset: Never</button></div>
+        </div>
+        <div class="route">
+          <div class="route-top"><span class="name">Mod Wheel</span><span class="pill">→ Inversion</span></div>
+          <div class="route-opts"><button class="pill ghost">Reset: On keys released</button></div>
+        </div>
+        <div class="route">
+          <div class="route-top"><span class="name">Modifier Keys</span><div class="toggle on" id="modkeys2" role="switch" aria-checked="true"></div></div>
+          <div class="route-opts"><button class="pill ghost" id="modmode">Mode: Hold</button><button class="pill ghost" id="borrow">Borrow: Major / Minor</button></div>
+        </div>
+      </div>
+      <div class="map">
+        <div class="route-top" style="margin-bottom:10px"><span class="lbl">Modifier map</span><span class="stublink">Remap ▸</span></div>
+        <div id="maplist"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="legend" id="legend"></div>
+
+<script src="engine.js"></script>
+<script>
+const C = window.Conchord;
+const $=id=>document.getElementById(id);
+const ZN = C.ZONE_MODIFIERS.length; // 9
+
+const state = {
+  key:0, scale:0, maxSize:4, inversion:0, voicing:0,
+  bass:false, bassVel:100, harmonyVel:100, strumMs:0, strumDir:0, outOfScale:2,
+  root:60, modifierKeys:true, modifierMode:0, borrow:0,
+  pb:null, mw:-1, pbTarget:2, mwTarget:2, invRangeDown:3, invRangeUp:3,
+  mode:"CHORD", modZoneLow:48, parkedMsg:"",
+};
+const activeModifiers = {};
+let vlAnchor = null, lastNotes = [];
+
+const vsel=$("voicing");
+C.VOICING_NAMES.forEach((v,i)=>{const o=document.createElement("option");o.value=i;o.textContent=v;vsel.appendChild(o);});
+
+// ---- Key/Scale-dropdown (klicka på "C Ionian")
+const keySel=$("keySel"), scaleSel=$("scaleSel");
+C.CHROM_SHORT.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n;keySel.appendChild(o);});
+C.SCALE_KEYS.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n;scaleSel.appendChild(o);});
+keySel.onchange=e=>{state.key=+e.target.value; render();};
+scaleSel.onchange=e=>{state.scale=+e.target.value; render();};
+$("keyscale").onclick=e=>{
+  e.stopPropagation();
+  const pop=$("kspop");
+  if(pop.hidden){ keySel.value=state.key; scaleSel.value=state.scale; pop.hidden=false; }
+  else pop.hidden=true;
+};
+$("kspop").onclick=e=>e.stopPropagation();
+document.addEventListener("click",()=>{$("kspop").hidden=true;});
+
+// ---- keyboard geometri
+const KB_LO=48, KB_HI=96, WK=40, BK=24, KH=160, BH=100;
+const whitePc=[0,2,4,5,7,9,11];
+const WHITES=(function(){let a=[];for(let m=KB_LO;m<=KB_HI;m++)if(whitePc.includes(((m%12)+12)%12))a.push(m);return a;})();
+const kb=$("kb"), kbscroll=$("kbscroll");
+function isZone(m){return state.modifierKeys && m>=state.modZoneLow && m<state.modZoneLow+ZN;}
+function whiteIndexLE(midi){let idx=0;for(let i=0;i<WHITES.length;i++){if(WHITES[i]<=midi)idx=i;else break;}return idx;}
+function oct(m){return Math.floor(m/12)-2;}
+
+function makeKey(m, white, zone, left, width, height){
+  const key=document.createElement("div"); key.className=(white?"wk":"bk")+(zone?" zone":"");
+  key.style.left=left+"px"; key.style.width=width+"px"; key.style.height=height+"px"; key.dataset.midi=m;
+  kb.appendChild(key);
+}
+function makeLabel(left, width, bottom, color, text, boxed){
+  const lb=document.createElement("div"); lb.className="klabel";
+  lb.style.left=left+"px"; lb.style.width=width+"px"; lb.style.bottom=bottom+"px"; lb.style.color=color; lb.textContent=text;
+  if(boxed){lb.style.background="rgba(7,18,14,.92)";lb.style.borderRadius="3px";lb.style.padding="1px 0";}
+  kb.appendChild(lb);
+}
+function buildKeyboardDOM(){
+  kb.innerHTML="";
+  kb.style.width=(WHITES.length*WK)+"px";
+  let wi=0;
+  for(let m=KB_LO;m<=KB_HI;m++){
+    const pc=((m%12)+12)%12, zone=isZone(m), white=whitePc.includes(pc);
+    if(white){
+      makeKey(m,true,zone, wi*WK, WK, KH);
+      if(pc===0) makeLabel(wi*WK, WK, 6, "#3a4a44", "C"+oct(m), false);
+      if(zone) makeLabel(wi*WK, WK, 6, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, false);
+      wi++;
+    } else {
+      makeKey(m,false,zone, wi*WK-BK/2, BK, BH);
+      if(zone) makeLabel(wi*WK-BK/2-7, BK+14, 66, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, true);
+    }
+  }
+  if(state.modifierKeys){
+    const si=whiteIndexLE(state.modZoneLow);
+    let wc=0; for(let mm=state.modZoneLow;mm<state.modZoneLow+ZN;mm++) if(whitePc.includes(((mm%12)+12)%12)) wc++;
+    const h=document.createElement("div"); h.className="zonehandle";
+    h.style.left=(si*WK)+"px"; h.style.width=(wc*WK)+"px"; h.innerHTML="<span>⇆ MOD ZONE</span>";
+    kb.appendChild(h); enableZoneDrag(h);
+  }
+}
+
+function enableZoneDrag(h){
+  h.addEventListener("pointerdown",e=>{
+    e.stopPropagation(); e.preventDefault();
+    const move=ev=>{
+      const r=kb.getBoundingClientRect();
+      let idx=Math.round((ev.clientX-r.left)/WK);
+      idx=Math.max(0,Math.min(WHITES.length-1,idx));
+      let start=WHITES[idx];
+      while(start+ZN-1>KB_HI) start--;
+      if(start<KB_LO) start=KB_LO;
+      if(start!==state.modZoneLow){ state.modZoneLow=start; buildKeyboardDOM(); render(); }
+    };
+    const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);};
+    document.addEventListener("pointermove",move); document.addEventListener("pointerup",up);
+  });
+}
+
+kb.addEventListener("click",e=>{
+  const k=e.target.closest("[data-midi]"); if(!k) return;
+  const m=+k.dataset.midi;
+  if(isZone(m)){ const i=m-state.modZoneLow; if(activeModifiers[i]) delete activeModifiers[i]; else activeModifiers[i]=true; }
+  else { vlAnchor=lastNotes.map(n=>n.pitch); state.root=m; }
+  render();
+});
+$("scrollL").onclick=()=>kbscroll.scrollBy({left:-WK*7,behavior:"smooth"});
+$("scrollR").onclick=()=>kbscroll.scrollBy({left:WK*7,behavior:"smooth"});
+
+// ---- PB / MW wheels
+function dragWheel(track,thumb,kind){
+  function place(){
+    const ph=thumb.offsetHeight,H=track.clientHeight;
+    let n=kind==="pb"?(state.pb==null?0.5:(state.pb+1)/2):(state.mw<0?0:state.mw);
+    thumb.style.top=((1-n)*(H-ph))+"px";
+    thumb.classList.toggle("untouched",kind==="pb"?state.pb==null:state.mw<0);
+  }
+  function apply(clientY){
+    const r=track.getBoundingClientRect();
+    let n=1-(clientY-r.top)/r.height; n=Math.max(0,Math.min(1,n));
+    if(kind==="pb"){state.pb=Math.abs(n-0.5)<0.04?0:(n*2-1);} else {state.mw=n;}
+    place(); render();
+  }
+  track.addEventListener("pointerdown",e=>{track.setPointerCapture(e.pointerId);apply(e.clientY);});
+  track.addEventListener("pointermove",e=>{if(e.buttons)apply(e.clientY);});
+  if(kind==="pb") track.addEventListener("dblclick",()=>{state.pb=null;place();render();});
+  track._place=place; place();
+}
+dragWheel($("pbtrack"),$("pbthumb"),"pb");
+dragWheel($("mwtrack"),$("mwthumb"),"mw");
+
+// ---- modifier map (backside) — följer modZoneLow
+function renderMap(){
+  const ml=$("maplist"); ml.innerHTML="";
+  C.ZONE_MODIFIERS.forEach((z,i)=>{
+    const m=state.modZoneLow+i, white=whitePc.includes(((m%12)+12)%12);
+    const row=document.createElement("div"); row.className="map-row "+(white?"white":"black");
+    row.innerHTML='<span class="k">'+C.noteShort(m)+oct(m)+'</span><span class="m">'+z.name+'</span>';
+    ml.appendChild(row);
+  });
+}
+
+// ---- controls
+$("size").oninput=e=>{state.maxSize=+e.target.value; $("vSize").textContent=state.maxSize; render();};
+$("inv").oninput=e=>{state.inversion=+e.target.value; render();};
+$("strum").oninput=e=>{state.strumMs=+e.target.value; $("vStrum").textContent=state.strumMs+" ms"; render();};
+$("voicing").onchange=e=>{state.voicing=+e.target.value; render();};
+$("oos").onchange=e=>{state.outOfScale=+e.target.value; render();};
+$("bass").onclick=()=>{state.bass=!state.bass; $("bass").classList.toggle("on",state.bass); render();};
+function syncModkeys(){$("modkeys").classList.toggle("on",state.modifierKeys);$("modkeys2").classList.toggle("on",state.modifierKeys);}
+function toggleModkeys(){state.modifierKeys=!state.modifierKeys; syncModkeys(); buildKeyboardDOM(); render();}
+$("modkeys").onclick=toggleModkeys;
+$("modkeys2").onclick=toggleModkeys;
+$("modmode").onclick=()=>{state.modifierMode^=1; $("modmode").textContent="Mode: "+(state.modifierMode?"Latch":"Hold");};
+$("borrow").onclick=()=>{state.borrow^=1; $("borrow").textContent="Borrow: "+(state.borrow?"Interval Mirror":"Major / Minor"); render();};
+
+function setMode(mode){
+  state.mode=mode;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.mode===mode));
+  const cap = mode==="HARP"?12:8;
+  $("size").max=cap; if(state.maxSize>cap){state.maxSize=cap; $("vSize").textContent=cap;} $("size").value=state.maxSize;
+  const harp=mode==="HARP";
+  $("ctlStrum").hidden=!harp; $("ctlHumanize").hidden=harp;
+  state.parkedMsg=(mode==="2-FINGER"||mode==="JAZZ")?(mode+"-läge är parkerat (layout-stub)"):"";
+  render();
+}
+$("tabs").addEventListener("click",e=>{const t=e.target.closest(".tab"); if(t) setMode(t.dataset.mode);});
+
+$("preset").onchange=e=>{
+  const p=C.PRESETS[e.target.value]; if(!p) return;
+  Object.assign(state,p);
+  const cap=+$("size").max; if(state.maxSize>cap) state.maxSize=cap;
+  $("size").value=state.maxSize; $("vSize").textContent=state.maxSize;
+  $("voicing").value=state.voicing; $("bass").classList.toggle("on",!!state.bass);
+  if(state.strumMs!=null){$("strum").value=state.strumMs; $("vStrum").textContent=state.strumMs+" ms";}
+  render();
+};
+$("toSetup").onclick=()=>{$("play").hidden=true;$("setup").hidden=false;};
+$("toPlay").onclick=()=>{$("setup").hidden=true;$("play").hidden=false;};
+
+// ---- render
+function render(){
+  const sActive=C.buildSettings(state, activeModifiers);
+  const active=C.buildChordNotes(state.root,100,sActive,null,(sActive.voiceLead?vlAnchor:null))||[];
+  const sFull=C.buildSettings(Object.assign({},state,{pb:null}), activeModifiers);
+  const full=C.buildChordNotes(state.root,100,sFull,null,(sFull.voiceLead?vlAnchor:null))||[];
+  lastNotes=active;
+  const activeSet=new Set(active.map(n=>n.pitch));
+  const ghostSet=new Set(full.filter(n=>!activeSet.has(n.pitch)).map(n=>n.pitch));
+
+  const nm=C.detectChordName(state.root,active);
+  $("cname").textContent=active.length?nm.name:"—";
+  $("cdesc").textContent=(active.length?nm.desc:"")+(active.length?" · "+C.VOICING_NAMES[state.voicing].toUpperCase():"");
+  $("ksText").textContent=(C.CHROM_SHORT[state.key]+" "+C.SCALE_KEYS[state.scale]).toUpperCase();
+
+  const chips=$("chips"); chips.innerHTML="";
+  active.forEach(n=>{const c=document.createElement("span");c.className="chip";c.textContent=C.noteShort(n.pitch);chips.appendChild(c);});
+
+  const bars=$("bars"); bars.innerHTML="";
+  full.forEach(n=>{const b=document.createElement("div");b.className="bar"+(activeSet.has(n.pitch)?"":" ghost");b.style.height=Math.max(8,Math.round(n.velocity/127*54))+"px";bars.appendChild(b);});
+
+  $("vInv").textContent=(state.inversion>0?"+":"")+state.inversion;
+  $("pbsub").innerHTML="→ SIZE<br><b>"+sActive.size+"</b>/"+sFull.size;
+  const off=sActive.inversionPerf; $("mwsub").innerHTML="→ INV<br><b>"+(off>0?"+":"")+off+"</b>"+(state.mw<0?" ·orört":"");
+
+  document.querySelectorAll(".wk,.bk").forEach(k=>{
+    const m=+k.dataset.midi; k.classList.remove("lit","root","ghost");
+    if(m===state.root) k.classList.add("root");
+    else if(activeSet.has(m)) k.classList.add("lit");
+    else if(ghostSet.has(m)) k.classList.add("ghost");
+    const inZone=isZone(m), i=m-state.modZoneLow;
+    k.style.outline=(inZone&&activeModifiers[i])?"2px solid var(--amber)":"";
+    k.style.outlineOffset="-2px";
+  });
+
+  $("zonelabel").textContent = state.modifierKeys
+    ? ("Mod zone: "+C.noteShort(state.modZoneLow)+oct(state.modZoneLow)+"–"+C.noteShort(state.modZoneLow+ZN-1)+oct(state.modZoneLow+ZN-1))
+    : "Mod zone: av";
+  const act=Object.keys(activeModifiers).map(Number).sort((a,b)=>a-b).map(i=>C.ZONE_MODIFIERS[i].name);
+  $("modnow").textContent=state.parkedMsg||(act.length?("Aktiva: "+act.join(" + ")):"");
+  renderMap();
+}
+
+$("legend").innerHTML=
+  "<b>Live (v0.9-motorn):</b> grundton full grön, aktiva ackordtoner grön 50%, och toner som faller bort när Pitch-hjulet gallrar storleken visas blekt (ghost) — både i staplarna och på klaviaturen. "+
+  "Kryddzonen: klick = krydda, dra handtaget = flytta start; stäng av med toggeln så försvinner den. <b>Chord</b> max 8 toner, <b>Harp</b> max 12 + strum.<br>"+
+  "<b>Stubbar:</b> 2-Finger/Jazz-flikar, routing/Remap, Humanize. Ackordnamnet är en preliminär detektor.";
+
+buildKeyboardDOM();
+setMode("CHORD");
+</script>
+</body>
+</html>

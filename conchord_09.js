@@ -584,9 +584,11 @@ function buildSingleNote(inputPitch, velocity, s) {
     return { pitch: inputPitch, velocity: velocity };
   if (s.outOfScale === 0) return null; // Mute
   if (s.outOfScale === 1) return { pitch: inputPitch, velocity: velocity }; // Pass Through
-  // Diminished-läget gäller bara ackord — en enstaka melodi-/join-ton kan inte
-  // bli ett dim-ackord, så den passerar igenom rått (kromatisk färgton får ringa).
-  if (s.outOfScale === 3) return { pitch: inputPitch, velocity: velocity };
+  // Diminished/Chrom Bass gäller bara ackord — en enstaka melodi-/join-ton kan
+  // inte bli ett dim- resp. slash-ackord, så den passerar igenom rått (kromatisk
+  // färgton får ringa; för Chrom Bass ÄR den spelade tonen redan basen).
+  if (s.outOfScale === 3 || s.outOfScale === 4)
+    return { pitch: inputPitch, velocity: velocity };
   // Snap to Scale: leta nedåt tills vi hittar en skalton
   for (var t = 1; t <= 11; t++) {
     if (getScaleDegree(inputPitch - t, s.key, s.scaleSteps).degree !== -1)
@@ -749,7 +751,7 @@ function getSettings() {
   s.strumMs = GetParameter("Strum (ms)");
   s.strumUp = GetParameter("Strum Direction") === 0;
   s.harmonyVel = GetParameter("Harmony Velocity %") / 100;
-  s.outOfScale = GetParameter("Out-of-Scale Keys"); // 0=Mute 1=Pass 2=Snap 3=Dim
+  s.outOfScale = GetParameter("Out-of-Scale Keys"); // 0=Mute 1=Pass 2=Snap 3=Dim 4=ChromBass
   s.shimmer = 0; // 0..1, sätts av Shimmer-modifiern
   s.dim = false; // sätts av Dim-modifiern: tvingar förminskat ackord
   s.dom7 = false; // sätts av Dom 7-modifiern: tvingar dominant7-ackord
@@ -819,6 +821,10 @@ function getSettings() {
 function buildChordNotes(inputPitch, velocity, s, extras, vlAnchor) {
   var root = inputPitch;
   var degreeInfo = getScaleDegree(root, s.key, s.scaleSteps);
+  // Chrom Bass: sätts när en out-of-scale-tangent ska behålla ackordets övre
+  // struktur (från närmaste skalgrad) men flytta grundtonen kromatiskt till den
+  // faktiskt spelade tonen. Hanteras vid bas-steget längre ner.
+  var chromBass = false;
 
   if (degreeInfo.degree === -1) {
     if (s.outOfScale === 0) return null; // Mute
@@ -829,6 +835,19 @@ function buildChordNotes(inputPitch, velocity, s, extras, vlAnchor) {
       // så root får vara den spelade tonen även utan giltig grad — grad -1 ger
       // bara NaN i intervallberäkningen, som ändå skrivs över av dim-stapeln.
       s.dim = true;
+    } else if (s.outOfScale === 4) {
+      // Chrom Bass: snappa till NÄRMASTE skalton (växelvis nedåt/uppåt) och bygg
+      // det diatoniska ackordet därifrån. Den faktiskt spelade tonen läggs sedan
+      // som ny grundton i bas-steget. Övre tonerna kommer alltså från grannskalan.
+      chromBass = true;
+      for (var d = 1; d <= 6 && degreeInfo.degree === -1; d++) {
+        root = inputPitch - d;
+        degreeInfo = getScaleDegree(root, s.key, s.scaleSteps);
+        if (degreeInfo.degree === -1) {
+          root = inputPitch + d;
+          degreeInfo = getScaleDegree(root, s.key, s.scaleSteps);
+        }
+      }
     } else {
       // Snap to Scale: leta nedåt tills vi hittar en skalton
       for (var t = 1; t <= 11 && degreeInfo.degree === -1; t++) {
@@ -843,8 +862,10 @@ function buildChordNotes(inputPitch, velocity, s, extras, vlAnchor) {
 
   // basnoten räknas som ackordets första ton: med Bass Note på bygger vi en
   // ton färre här, så att bas + ackordtoner = Chord Size (i st f Size + 1).
+  // Undantag: Chrom Bass byter UT grundtonen mot den kromatiska basen (ingen
+  // extra ton), så där bygger vi full storlek även med Bass Note på.
   var coloredDegrees = applyChordColor(s.baseDegrees, s.colorName);
-  var numChordNotes = s.bass ? Math.max(0, s.size - 1) : s.size;
+  var numChordNotes = s.bass && !chromBass ? Math.max(0, s.size - 1) : s.size;
   var degreesForNotes = extendDegreesForNumNotes(coloredDegrees, numChordNotes);
 
   // skalgrader -> halvtoner
@@ -911,7 +932,28 @@ function buildChordNotes(inputPitch, velocity, s, extras, vlAnchor) {
   });
   chord = dedupe(chord);
 
-  if (s.bass) {
+  if (chromBass) {
+    // Flytta grundtonen kromatiskt: ta bort den lägsta förekomsten av den
+    // snappade grundtonens tonklass och lägg den faktiskt spelade out-of-scale-
+    // tonen i stället. Övre toner (ters/kvint/...) ligger kvar, så C-E-G blir
+    // C#-E-G — ett slash-ackord med kromatisk bas. (chord är sorterat stigande,
+    // så första träffen är basförekomsten; ev. oktavdubblad grundton längst upp
+    // räknas som en övre ton och behålls.)
+    var rootPc = ((root % 12) + 12) % 12;
+    for (var bi = 0; bi < chord.length; bi++) {
+      if (((chord[bi] % 12) + 12) % 12 === rootPc) {
+        chord.splice(bi, 1);
+        break;
+      }
+    }
+    if (chord.indexOf(inputPitch) === -1) chord.push(inputPitch);
+    // Bass Note på: lägg dessutom den kromatiska tonen en oktav under.
+    if (s.bass && chord.indexOf(inputPitch - 12) === -1) chord.unshift(inputPitch - 12);
+    chord.sort(function (a, b) {
+      return a - b;
+    });
+    chord = dedupe(chord);
+  } else if (s.bass) {
     var bassPitch = root - 12;
     if (chord.indexOf(bassPitch) === -1) chord.unshift(bassPitch);
   }
@@ -1352,7 +1394,7 @@ var PluginParameters = [
   {
     name: "Out-of-Scale Keys",
     type: "menu",
-    valueStrings: ["Mute", "Pass Through", "Snap to Scale", "Diminished"],
+    valueStrings: ["Mute", "Pass Through", "Snap to Scale", "Diminished", "Chrom Bass"],
     defaultValue: 2,
   },
   { name: "Modifier Keys", type: "checkbox", defaultValue: 1 },
