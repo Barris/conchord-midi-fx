@@ -40,6 +40,21 @@ const CHORD_BASE_TYPES = {
 
 const VOICING_NAMES = ["Close", "Drop 2", "Drop 3", "Drop 2+4", "Spread"];
 
+// ZONE-läge: explicita kvaliteter (intervall i halvtoner från grundtonen). Till
+// skillnad från den ordinarie kryddzonen (rent diatonisk) bär den här BÅDE dur
+// och moll, så chord-zonens vänsterhand väljer ackord direkt på grundtonen.
+const ZONE_QUALITIES = [
+  { short: "MAJ", name: "Major", intervals: [0, 4, 7] },
+  { short: "MIN", name: "Minor", intervals: [0, 3, 7] },
+  { short: "MAJ7", name: "Major 7", intervals: [0, 4, 7, 11] },
+  { short: "MIN7", name: "Minor 7", intervals: [0, 3, 7, 10] },
+  { short: "DOM7", name: "Dominant 7", intervals: [0, 4, 7, 10] },
+  { short: "SUS2", name: "Sus2", intervals: [0, 2, 7] },
+  { short: "SUS4", name: "Sus4", intervals: [0, 5, 7] },
+  { short: "DIM", name: "Diminished", intervals: [0, 3, 6] },
+  { short: "AUG", name: "Augmented", intervals: [0, 4, 8] },
+];
+
 const CHROMATIC_SCALE_STRINGS = [
   "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B",
 ];
@@ -318,6 +333,41 @@ function buildChordNotes(inputPitch, velocity, s, extras, vlAnchor) {
   return notes;
 }
 
+// ===== ZONE-LÄGE =====
+// Kompakt, röstlett ackord. Grundton från note-zonen (höger hand), ackordet
+// (kvalitet eller fritt grepp) från chord-zonen (vänster hand). Confineras till
+// en oktav genom voice leading mot föregående ackord -> alla inversioner ligger
+// tätt: C -> C-E-G, men F -> C-F-A (2:a inv, packad nära). Första ackordet (utan
+// ankare) hamnar i grundläge. vlAnchor = föregående zon-ackords toner (eller null).
+//
+//   intervals : halvtonsintervall från grundtonen (Orchid-kvalitet ELLER grepp).
+//   s.zoneRegister : oktav-offset från mod wheel (vandra upp/ner på brädet).
+function buildZoneChord(rootMidi, intervals, velocity, s, vlAnchor) {
+  if (!intervals || !intervals.length) return null;
+  let chord = dedupe(intervals.map((iv) => rootMidi + iv).sort((a, b) => a - b));
+  if (vlAnchor && vlAnchor.length && chord.length > 1) {
+    chord = applyVoiceLeading(chord, vlAnchor);
+    chord = dedupe(chord.slice(0).sort((a, b) => a - b));
+  }
+  const reg = s.zoneRegister || 0;
+  const notes = [];
+  for (let i = 0; i < chord.length; i++) {
+    const p = chord[i] + 12 * reg;
+    if (p < 0 || p > 127) continue;
+    const v = i === 0 ? velocity : velocity * s.harmonyVel;
+    notes.push({ pitch: p, velocity: Math.round(v), delay: 0 });
+  }
+  return notes;
+}
+
+// Snappa en grundton nedåt till närmaste skalton (samma som Snap to Scale).
+function snapRootToScale(rootMidi, key, scaleSteps) {
+  for (let t = 0; t <= 11; t++) {
+    if (getScaleDegree(rootMidi - t, key, scaleSteps).degree !== -1) return rootMidi - t;
+  }
+  return rootMidi;
+}
+
 // ===== ACKORDNAMN (preliminär detektor — INTE motorlogik) =====
 // Basal etikett från de byggda tonernas intervall mot grundtonen. Räcker för
 // chord viewern i prototypen; full namngivning är parkerad.
@@ -365,9 +415,10 @@ function detectChordName(rootMidi, notes) {
 
 // ===== EXPORT (UMD: webbläsare via window.Conchord, node via module.exports) =====
 const Conchord = {
-  SCALE_TEMPLATES, SCALE_KEYS, CHORD_BASE_TYPES, VOICING_NAMES,
+  SCALE_TEMPLATES, SCALE_KEYS, CHORD_BASE_TYPES, VOICING_NAMES, ZONE_QUALITIES,
   CHROMATIC_SCALE_STRINGS, CHROM_SHORT, MOD_ZONE_LOW, ZONE_MODIFIERS, PRESETS,
   noteName, noteShort, getScaleDegree, buildSettings, buildChordNotes, detectChordName,
+  buildZoneChord, snapRootToScale,
 };
 if (typeof window !== "undefined") window.Conchord = Conchord;
 if (typeof module !== "undefined" && module.exports) module.exports = Conchord;

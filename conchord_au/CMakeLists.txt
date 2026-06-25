@@ -40,8 +40,22 @@ juce_add_plugin(ConchordAU
 
 juce_generate_juce_header(ConchordAU)
 
+# ---- Embed the piano samples (used by the built-in Standalone synth) ----
+juce_add_binary_data(ConchordSamples
+    SOURCES
+        samples/UR1_C1_f_RR1.wav
+        samples/UR1_C2_f_RR1.wav
+        samples/UR1_C3_f_RR1.wav
+        samples/UR1_C4_f_RR1.wav
+        samples/UR1_C5_f_RR1.wav
+        samples/UR1_C6_f_RR1.wav
+)
+# Needed so the static data links cleanly into the AU/Standalone bundles.
+set_target_properties(ConchordSamples PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+
 target_sources(ConchordAU PRIVATE
     Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
 )
 
 target_compile_definitions(ConchordAU PUBLIC
@@ -52,6 +66,7 @@ target_compile_definitions(ConchordAU PUBLIC
 
 target_link_libraries(ConchordAU PRIVATE
     juce::juce_audio_utils
+    ConchordSamples
     PUBLIC
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags

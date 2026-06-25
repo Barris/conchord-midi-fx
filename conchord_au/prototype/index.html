@@ -109,6 +109,13 @@
   .map-row .m{font-weight:600}
   .stublink{cursor:pointer;color:var(--teal);font-family:var(--mono);font-size:12px}
   .flipbtn{cursor:pointer}
+  .zoneq{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .qbtn{cursor:pointer;font-family:var(--mono);font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid #2a3a34;background:#0f1a16;color:#9fbcb0}
+  .qbtn.on{background:var(--teal);color:#06120e;border-color:var(--teal)}
+  .wk.zoneB{background:linear-gradient(#2c2410,#201809);border-color:#5a4a1d}
+  .bk.zoneB{background:linear-gradient(#4a3a16,#2c2209);border-color:#5a4a1d}
+  .zhandle{position:absolute;top:0;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:ew-resize;z-index:5;font-family:var(--mono);font-size:9px;color:#06120e;padding:0 4px;background:rgba(95,227,179,.92);white-space:nowrap;overflow:hidden}
+  .zhandle.b{background:rgba(240,190,90,.92)}
   [hidden]{display:none !important}
   .legend{max-width:1000px;width:100%;font-size:13px;color:#5a5a55;line-height:1.6}
   .legend code{font-family:var(--mono);background:#dcdad3;padding:1px 5px;border-radius:4px}
@@ -130,8 +137,8 @@
 
     <div class="tabs" id="tabs">
       <div class="tab on" data-mode="CHORD">CHORD</div>
+      <div class="tab" data-mode="2-touch">2-TOUCH</div>
       <div class="tab" data-mode="HARP">HARP</div>
-      <div class="tab stub" data-mode="2-FINGER">2-FINGER</div>
       <div class="tab stub" data-mode="JAZZ">JAZZ</div>
     </div>
 
@@ -165,18 +172,24 @@
           <div class="row"><span class="lbl">Strum</span><span class="val" id="vStrum">0 ms</span></div>
           <input type="range" id="strum" min="0" max="200" step="1" value="0">
         </div>
-        <div class="divider"></div>
+        <div class="divider" id="divMain"></div>
         <div class="seg"><span class="lbl">Voicing</span><select id="voicing"></select></div>
         <div class="seg"><span class="lbl">Out-of-scale</span>
           <select id="oos"><option value="0">Mute</option><option value="1">Pass</option><option value="2" selected>Snap</option><option value="3">Dim</option></select></div>
         <div class="seg"><span class="lbl">Bass note</span><div class="toggle" id="bass" role="switch" aria-checked="false"></div></div>
+        <div id="zonePanel" hidden>
+          <div class="divider"></div>
+          <div class="seg"><span class="lbl">Layout</span>
+            <select id="zoneFlavor"><option value="0">Orchid</option><option value="1">Hands</option></select></div>
+          <div class="seg"><span class="lbl">Snap to scale</span><div class="toggle" id="zoneSnap" role="switch" aria-checked="false"></div></div>
+        </div>
       </div>
     </div>
 
     <div class="kbwrap">
       <div class="kbhead">
         <div class="left"><div class="toggle on" id="modkeys" role="switch" aria-checked="true"></div>
-          <span class="lbl">Mod zone · klick = krydda · dra handtaget = flytta</span></div>
+          <span class="lbl" id="modkeysLabel">Mod zone · klick = krydda · dra handtaget = flytta</span></div>
         <span class="lbl faint stublink flipbtn" id="toSetup">setup ▸</span>
       </div>
 
@@ -253,9 +266,33 @@ const state = {
   root:60, modifierKeys:true, modifierMode:0, borrow:0,
   pb:null, mw:-1, pbTarget:2, mwTarget:2, invRangeDown:3, invRangeUp:3,
   mode:"CHORD", modZoneLow:48, parkedMsg:"",
+  // 2-touch-läge: två draggbara en-oktavs-zoner (zon A lägre, zon B högre).
+  // Orchid: A=kvalitet, B=grundton. Hands: A=triad/grundton, B=ackord/kvalitet.
+  zoneFlavor:0, zoneQuality:0, zoneSnap:false, zoneRegister:0, zoneAlo:48, zoneBlo:60,
 };
 const activeModifiers = {};
 let vlAnchor = null, lastNotes = [];
+let zoneAnchorNeutral = null; // ZONE: voice-leading-ankare i register-neutral ram (utan MW-oktavskift)
+
+// ---- Mode-ägande: varje mode äger sin egen inställningsbubbla. Globala fält
+// (key/scale/borrow/root/transient) delas; allt nedan swappas vid mode-byte så
+// att t.ex. strum aldrig läcker mellan lägen.
+const MODE_OWNED = [
+  "maxSize","inversion","invRangeDown","invRangeUp","voicing","bass","bassVel",
+  "harmonyVel","strumMs","strumDir","outOfScale","modifierKeys","modifierMode",
+  "pbTarget","mwTarget","modZoneLow",
+  "zoneFlavor","zoneQuality","zoneSnap","zoneRegister","zoneAlo","zoneBlo",
+];
+function ownedSnapshot(src){ const o={}; MODE_OWNED.forEach(k=>o[k]=src[k]); return o; }
+// Startvärden per mode (karaktärisering — modes är musikaliskt särartade, inte
+// bara samma defaults). HARP = strummad/bred, 2-touch = kompakt close voicing.
+const modeStore = {
+  CHORD:     ownedSnapshot(state),
+  "2-touch": Object.assign(ownedSnapshot(state), { maxSize:3, voicing:0, strumMs:0, modifierKeys:false }),
+  HARP:      Object.assign(ownedSnapshot(state), { maxSize:7, voicing:4, strumMs:90, strumDir:0, harmonyVel:85 }),
+  JAZZ:      ownedSnapshot(state),
+};
+let currentMode = null;
 
 const vsel=$("voicing");
 C.VOICING_NAMES.forEach((v,i)=>{const o=document.createElement("option");o.value=i;o.textContent=v;vsel.appendChild(o);});
@@ -284,11 +321,18 @@ function isZone(m){return state.modifierKeys && m>=state.modZoneLow && m<state.m
 function whiteIndexLE(midi){let idx=0;for(let i=0;i<WHITES.length;i++){if(WHITES[i]<=midi)idx=i;else break;}return idx;}
 function oct(m){return Math.floor(m/12)-2;}
 
-function makeKey(m, white, zone, left, width, height){
-  const key=document.createElement("div"); key.className=(white?"wk":"bk")+(zone?" zone":"");
+function makeKey(m, white, zoneCls, left, width, height){
+  const key=document.createElement("div"); key.className=(white?"wk":"bk")+(zoneCls||"");
   key.style.left=left+"px"; key.style.width=width+"px"; key.style.height=height+"px"; key.dataset.midi=m;
   kb.appendChild(key);
 }
+
+// ---- 2-touch geometri: två en-oktavs-zoner. Roller beror på flavor.
+function inZoneA(m){ return m>=state.zoneAlo && m<state.zoneAlo+12; }
+function inZoneB(m){ return m>=state.zoneBlo && m<state.zoneBlo+12; }
+// Vilken zon-låg är kvalitetsväljaren resp. grundtonen? Orchid: A=kvalitet, B=root. Hands: tvärtom.
+function qualLow(){ return state.zoneFlavor===0 ? state.zoneAlo : state.zoneBlo; }
+function rootLow(){ return state.zoneFlavor===0 ? state.zoneBlo : state.zoneAlo; }
 function makeLabel(left, width, bottom, color, text, boxed){
   const lb=document.createElement("div"); lb.className="klabel";
   lb.style.left=left+"px"; lb.style.width=width+"px"; lb.style.bottom=bottom+"px"; lb.style.color=color; lb.textContent=text;
@@ -298,26 +342,70 @@ function makeLabel(left, width, bottom, color, text, boxed){
 function buildKeyboardDOM(){
   kb.innerHTML="";
   kb.style.width=(WHITES.length*WK)+"px";
+  const tt=state.mode==="2-touch";
+  const orchid=state.zoneFlavor===0;
   let wi=0;
   for(let m=KB_LO;m<=KB_HI;m++){
-    const pc=((m%12)+12)%12, zone=isZone(m), white=whitePc.includes(pc);
-    if(white){
-      makeKey(m,true,zone, wi*WK, WK, KH);
-      if(pc===0) makeLabel(wi*WK, WK, 6, "#3a4a44", "C"+oct(m), false);
-      if(zone) makeLabel(wi*WK, WK, 6, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, false);
-      wi++;
-    } else {
-      makeKey(m,false,zone, wi*WK-BK/2, BK, BH);
-      if(zone) makeLabel(wi*WK-BK/2-7, BK+14, 66, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, true);
+    const pc=((m%12)+12)%12, white=whitePc.includes(pc);
+    let zoneCls="";
+    if(tt){ if(inZoneA(m)) zoneCls=" zone"; else if(inZoneB(m)) zoneCls=" zoneB"; }
+    else if(isZone(m)) zoneCls=" zone";
+    const left = white ? wi*WK : wi*WK-BK/2;
+    const w = white ? WK : BK;
+    makeKey(m, white, zoneCls, left, w, white?KH:BH);
+    if(white && pc===0) makeLabel(wi*WK, WK, 6, "#3a4a44", "C"+oct(m), false);
+    if(!tt && zoneCls){ // mod-zon-etiketter
+      if(white) makeLabel(wi*WK, WK, 6, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, false);
+      else      makeLabel(wi*WK-BK/2-7, BK+14, 66, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, true);
     }
+    if(tt){ // kvalitetsetiketter på kvalitets-zonens tangenter
+      const ql=qualLow(), qi=m-ql;
+      if(qi>=0 && qi<C.ZONE_QUALITIES.length){
+        const col = (qualLow()===state.zoneAlo) ? "var(--teal)" : "var(--amber)";
+        if(white) makeLabel(wi*WK, WK, 6, col, C.ZONE_QUALITIES[qi].short, false);
+        else      makeLabel(wi*WK-BK/2-9, BK+18, 66, col, C.ZONE_QUALITIES[qi].short, true);
+      }
+    }
+    if(white) wi++;
   }
-  if(state.modifierKeys){
+  if(tt){
+    drawZoneHandle(state.zoneAlo, false, orchid?"QUALITY":"TRIAD · ROOT");
+    drawZoneHandle(state.zoneBlo, true,  orchid?"NOTE · ROOT":"CHORD · QUALITY");
+  } else if(state.modifierKeys){
     const si=whiteIndexLE(state.modZoneLow);
     let wc=0; for(let mm=state.modZoneLow;mm<state.modZoneLow+ZN;mm++) if(whitePc.includes(((mm%12)+12)%12)) wc++;
     const h=document.createElement("div"); h.className="zonehandle";
     h.style.left=(si*WK)+"px"; h.style.width=(wc*WK)+"px"; h.innerHTML="<span>⇆ MOD ZONE</span>";
     kb.appendChild(h); enableZoneDrag(h);
   }
+}
+
+// Rita ett draggbart handtag över en en-oktavs-zon [lo, lo+11].
+function drawZoneHandle(lo, isB, label){
+  let first=-1,last=-1;
+  for(let i=0;i<WHITES.length;i++){ if(WHITES[i]>=lo && WHITES[i]<lo+12){ if(first<0)first=i; last=i; } }
+  if(first<0) return;
+  const h=document.createElement("div"); h.className="zhandle"+(isB?" b":"");
+  h.style.left=(first*WK)+"px"; h.style.width=((last-first+1)*WK)+"px"; h.textContent=label;
+  kb.appendChild(h);
+  enableTouchZoneDrag(h, isB);
+}
+
+function enableTouchZoneDrag(h, isB){
+  h.addEventListener("pointerdown",e=>{
+    e.stopPropagation(); e.preventDefault();
+    const move=ev=>{
+      const r=kb.getBoundingClientRect();
+      let idx=Math.round((ev.clientX-r.left)/WK);
+      idx=Math.max(0,Math.min(WHITES.length-1,idx));
+      let lo=WHITES[idx];
+      while(lo+11>KB_HI) lo-=12; if(lo<KB_LO) lo=KB_LO;
+      const key=isB?"zoneBlo":"zoneAlo";
+      if(state[key]!==lo){ state[key]=lo; buildKeyboardDOM(); render(); }
+    };
+    const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);};
+    document.addEventListener("pointermove",move); document.addEventListener("pointerup",up);
+  });
 }
 
 function enableZoneDrag(h){
@@ -340,6 +428,12 @@ function enableZoneDrag(h){
 kb.addEventListener("click",e=>{
   const k=e.target.closest("[data-midi]"); if(!k) return;
   const m=+k.dataset.midi;
+  if(state.mode==="2-touch"){
+    const ql=qualLow(), rl=rootLow(), qi=m-ql;
+    if(qi>=0 && qi<C.ZONE_QUALITIES.length){ state.zoneQuality=qi; }              // kvalitets-zon: välj ackord
+    else if(m>=rl && m<rl+12){ vlAnchor=zoneAnchorNeutral; state.root=m; }        // grundtons-zon: ny root (neutralt ankare)
+    render(); return;
+  }
   if(isZone(m)){ const i=m-state.modZoneLow; if(activeModifiers[i]) delete activeModifiers[i]; else activeModifiers[i]=true; }
   else { vlAnchor=lastNotes.map(n=>n.pitch); state.root=m; }
   render();
@@ -394,14 +488,54 @@ $("modkeys2").onclick=toggleModkeys;
 $("modmode").onclick=()=>{state.modifierMode^=1; $("modmode").textContent="Mode: "+(state.modifierMode?"Latch":"Hold");};
 $("borrow").onclick=()=>{state.borrow^=1; $("borrow").textContent="Borrow: "+(state.borrow?"Interval Mirror":"Major / Minor"); render();};
 
+// Per-mode synlighet av kontroller (specialinställningar bara där de hör hemma).
+function applyGating(mode){
+  const harp=mode==="HARP", tt=mode==="2-touch";
+  const cap = harp?12:8;
+  $("size").max=cap; if(state.maxSize>cap) state.maxSize=cap;
+  $("ctlStrum").hidden = !harp;            // strum bara i Harp
+  $("ctlHumanize").hidden = harp || tt;    // humanize göms i Harp/2-touch
+  // 2-touch: Chord Size + Inversion finns kvar i ALLA lägen. Voicing/OOS/Bass inerta -> göms.
+  $("zonePanel").hidden = !tt;
+  $("divMain").hidden = tt;
+  $("voicing").closest(".seg").hidden = tt;
+  $("oos").closest(".seg").hidden = tt;
+  $("bass").closest(".seg").hidden = tt;
+  // 2-touch har två fasta draggbara zoner -> ingen mod-zon-toggle
+  $("modkeys").style.display = tt ? "none" : "";
+  $("modkeysLabel").textContent = tt
+    ? "2-touch · två zoner (dra för att flytta)"
+    : "Mod zone · klick = krydda · dra handtaget = flytta";
+  state.parkedMsg=(mode==="JAZZ")?(mode+"-läge är parkerat (layout-stub)"):"";
+}
+
+// Skriv tillbaka hela state till DOM-kontrollerna (efter att ett mode laddats).
+function syncControlsFromState(){
+  $("size").value=state.maxSize; $("vSize").textContent=state.maxSize;
+  $("inv").value=state.inversion;
+  $("strum").value=state.strumMs; $("vStrum").textContent=state.strumMs+" ms";
+  $("voicing").value=state.voicing;
+  $("oos").value=state.outOfScale;
+  $("bass").classList.toggle("on",!!state.bass);
+  syncModkeys();
+  $("modmode").textContent="Mode: "+(state.modifierMode?"Latch":"Hold");
+  $("zoneFlavor").value=state.zoneFlavor;
+  $("zoneSnap").classList.toggle("on",!!state.zoneSnap);
+  if($("pbtrack")._place) $("pbtrack")._place();   // hjul-thumbs till nollat läge
+  if($("mwtrack")._place) $("mwtrack")._place();
+  buildKeyboardDOM(); // modZoneLow/modifierKeys/zon-positioner kan ha bytts av mode-laddningen
+}
+
 function setMode(mode){
-  state.mode=mode;
+  if(currentMode) modeStore[currentMode]=ownedSnapshot(state); // spara utgående
+  Object.assign(state, modeStore[mode]);                       // ladda inkommande
+  state.mode=mode; currentMode=mode;
+  for(const k in activeModifiers) delete activeModifiers[k];   // transient krydd-state nollas
+  vlAnchor=null; zoneAnchorNeutral=null;
+  state.pb=null; state.mw=-1;   // perf-hjulen betyder olika saker per mode -> nolla vid byte
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.mode===mode));
-  const cap = mode==="HARP"?12:8;
-  $("size").max=cap; if(state.maxSize>cap){state.maxSize=cap; $("vSize").textContent=cap;} $("size").value=state.maxSize;
-  const harp=mode==="HARP";
-  $("ctlStrum").hidden=!harp; $("ctlHumanize").hidden=harp;
-  state.parkedMsg=(mode==="2-FINGER"||mode==="JAZZ")?(mode+"-läge är parkerat (layout-stub)"):"";
+  applyGating(mode);
+  syncControlsFromState();
   render();
 }
 $("tabs").addEventListener("click",e=>{const t=e.target.closest(".tab"); if(t) setMode(t.dataset.mode);});
@@ -420,17 +554,34 @@ $("toPlay").onclick=()=>{$("setup").hidden=true;$("play").hidden=false;};
 
 // ---- render
 function render(){
-  const sActive=C.buildSettings(state, activeModifiers);
-  const active=C.buildChordNotes(state.root,100,sActive,null,(sActive.voiceLead?vlAnchor:null))||[];
-  const sFull=C.buildSettings(Object.assign({},state,{pb:null}), activeModifiers);
-  const full=C.buildChordNotes(state.root,100,sFull,null,(sFull.voiceLead?vlAnchor:null))||[];
+  let active, full, descExtra=null, sActive=null, sFull=null;
+  if(state.mode==="2-touch"){
+    const scaleSteps=C.SCALE_TEMPLATES[C.SCALE_KEYS[state.scale]];
+    let root=state.root;
+    if(state.zoneSnap) root=C.snapRootToScale(root, state.key, scaleSteps);
+    const reg = state.zoneRegister = state.mw<0 ? 0 : Math.round((state.mw-0.5)*4); // MW vandrar register (±2 okt)
+    const intervals=C.ZONE_QUALITIES[state.zoneQuality].intervals;
+    // Voice-leada i register-neutral ram (reg=0) -> ankaret ackumulerar inte oktaver.
+    const neutral=C.buildZoneChord(root, intervals, 100, { harmonyVel:state.harmonyVel/100, zoneRegister:0 }, vlAnchor)||[];
+    zoneAnchorNeutral=neutral.map(n=>n.pitch);
+    active=neutral.map(n=>({ pitch:n.pitch+12*reg, velocity:n.velocity, delay:0 })).filter(n=>n.pitch>=0&&n.pitch<=127);
+    full=active;
+    descExtra = C.ZONE_QUALITIES[state.zoneQuality].name.toUpperCase();
+  } else {
+    sActive=C.buildSettings(state, activeModifiers);
+    active=C.buildChordNotes(state.root,100,sActive,null,(sActive.voiceLead?vlAnchor:null))||[];
+    sFull=C.buildSettings(Object.assign({},state,{pb:null}), activeModifiers);
+    full=C.buildChordNotes(state.root,100,sFull,null,(sFull.voiceLead?vlAnchor:null))||[];
+  }
   lastNotes=active;
   const activeSet=new Set(active.map(n=>n.pitch));
   const ghostSet=new Set(full.filter(n=>!activeSet.has(n.pitch)).map(n=>n.pitch));
 
   const nm=C.detectChordName(state.root,active);
   $("cname").textContent=active.length?nm.name:"—";
-  $("cdesc").textContent=(active.length?nm.desc:"")+(active.length?" · "+C.VOICING_NAMES[state.voicing].toUpperCase():"");
+  $("cdesc").textContent = !active.length ? "" :
+    (state.mode==="2-touch" ? descExtra
+                            : nm.desc+" · "+C.VOICING_NAMES[state.voicing].toUpperCase());
   $("ksText").textContent=(C.CHROM_SHORT[state.key]+" "+C.SCALE_KEYS[state.scale]).toUpperCase();
 
   const chips=$("chips"); chips.innerHTML="";
@@ -440,31 +591,53 @@ function render(){
   full.forEach(n=>{const b=document.createElement("div");b.className="bar"+(activeSet.has(n.pitch)?"":" ghost");b.style.height=Math.max(8,Math.round(n.velocity/127*54))+"px";bars.appendChild(b);});
 
   $("vInv").textContent=(state.inversion>0?"+":"")+state.inversion;
-  $("pbsub").innerHTML="→ SIZE<br><b>"+sActive.size+"</b>/"+sFull.size;
-  const off=sActive.inversionPerf; $("mwsub").innerHTML="→ INV<br><b>"+(off>0?"+":"")+off+"</b>"+(state.mw<0?" ·orört":"");
+  if(state.mode==="2-touch"){
+    $("pbsub").innerHTML="→ SIZE";
+    $("mwsub").innerHTML="→ REGISTER<br><b>"+(state.zoneRegister>0?"+":"")+state.zoneRegister+" okt</b>";
+  } else {
+    $("pbsub").innerHTML="→ SIZE<br><b>"+sActive.size+"</b>/"+sFull.size;
+    const off=sActive.inversionPerf; $("mwsub").innerHTML="→ INV<br><b>"+(off>0?"+":"")+off+"</b>"+(state.mw<0?" ·orört":"");
+  }
 
   document.querySelectorAll(".wk,.bk").forEach(k=>{
     const m=+k.dataset.midi; k.classList.remove("lit","root","ghost");
     if(m===state.root) k.classList.add("root");
     else if(activeSet.has(m)) k.classList.add("lit");
     else if(ghostSet.has(m)) k.classList.add("ghost");
-    const inZone=isZone(m), i=m-state.modZoneLow;
-    k.style.outline=(inZone&&activeModifiers[i])?"2px solid var(--amber)":"";
+    let outlined;
+    if(state.mode==="2-touch") outlined = (m===qualLow()+state.zoneQuality); // vald kvalitet
+    else { const i=m-state.modZoneLow; outlined = isZone(m)&&activeModifiers[i]; }
+    k.style.outline=outlined?"2px solid var(--amber)":"";
     k.style.outlineOffset="-2px";
   });
 
-  $("zonelabel").textContent = state.modifierKeys
-    ? ("Mod zone: "+C.noteShort(state.modZoneLow)+oct(state.modZoneLow)+"–"+C.noteShort(state.modZoneLow+ZN-1)+oct(state.modZoneLow+ZN-1))
-    : "Mod zone: av";
-  const act=Object.keys(activeModifiers).map(Number).sort((a,b)=>a-b).map(i=>C.ZONE_MODIFIERS[i].name);
-  $("modnow").textContent=state.parkedMsg||(act.length?("Aktiva: "+act.join(" + ")):"");
+  if(state.mode==="2-touch"){
+    const orchid=state.zoneFlavor===0;
+    $("zonelabel").textContent = orchid
+      ? "Orchid · grön zon = QUALITY, gul zon = NOTE (root)"
+      : "Hands · grön zon = TRIAD (root), gul zon = CHORD (quality)  [provisorisk]";
+    $("modnow").textContent="Ackord: "+C.ZONE_QUALITIES[state.zoneQuality].name+" · root "+C.noteShort(state.root)+oct(state.root)+(state.zoneSnap?" · snap":"");
+  } else {
+    $("zonelabel").textContent = state.modifierKeys
+      ? ("Mod zone: "+C.noteShort(state.modZoneLow)+oct(state.modZoneLow)+"–"+C.noteShort(state.modZoneLow+ZN-1)+oct(state.modZoneLow+ZN-1))
+      : "Mod zone: av";
+    const act=Object.keys(activeModifiers).map(Number).sort((a,b)=>a-b).map(i=>C.ZONE_MODIFIERS[i].name);
+    $("modnow").textContent=state.parkedMsg||(act.length?("Aktiva: "+act.join(" + ")):"");
+  }
   renderMap();
 }
 
 $("legend").innerHTML=
   "<b>Live (v0.9-motorn):</b> grundton full grön, aktiva ackordtoner grön 50%, och toner som faller bort när Pitch-hjulet gallrar storleken visas blekt (ghost) — både i staplarna och på klaviaturen. "+
   "Kryddzonen: klick = krydda, dra handtaget = flytta start; stäng av med toggeln så försvinner den. <b>Chord</b> max 8 toner, <b>Harp</b> max 12 + strum.<br>"+
-  "<b>Stubbar:</b> 2-Finger/Jazz-flikar, routing/Remap, Humanize. Ackordnamnet är en preliminär detektor.";
+  "<b>Modes äger egna inställningar</b> — byt flik och inställningar (strum m.m.) följer med respektive läge, läcker aldrig.<br>"+
+  "<b>2-touch</b>: kompakt, röstlett läge med två draggbara en-oktavs-zoner (ingen toggle). Ackordet packas i en oktav och läggs nära föregående (C→C-E-G, F→C-F-A). "+
+  "<i>Orchid</i>: grön zon = kvalitet (maj/min/7…), gul zon = grundton. <i>Hands</i> (provisorisk, ersätter 2-finger): grön zon = triad/grundton, gul zon = kvalitet. Mod wheel vandrar register.<br>"+
+  "<b>Stubbar:</b> Jazz-fliken, routing/Remap, Humanize. Ackordnamnet är en preliminär detektor.";
+
+// ---- 2-touch-kontroller (kvalitetsval sker på klaviaturens kvalitets-zon)
+$("zoneFlavor").onchange=e=>{ state.zoneFlavor=+e.target.value; buildKeyboardDOM(); render(); };
+$("zoneSnap").onclick=()=>{ state.zoneSnap=!state.zoneSnap; $("zoneSnap").classList.toggle("on",state.zoneSnap); render(); };
 
 buildKeyboardDOM();
 setMode("CHORD");

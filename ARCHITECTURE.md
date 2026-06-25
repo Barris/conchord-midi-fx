@@ -16,7 +16,7 @@ att svara på frågor om struktur, funktion och musikteori. README.md är den
 |---|---|
 | `conchord_09.js` | Aktuell Scripter-motor (Logic Pro MIDI FX, JavaScript). |
 | `conchord_0[3-8].js` | Tidigare versioner, sparade för referens. |
-| `conchord_au/` | C++/JUCE-port av motorn som riktig AU MIDI-FX (Fas 1+2 klara, auval PASS, ingen GUI än). Se `conchord_au/README.md`. |
+| `conchord_au/` | C++/JUCE-port av motorn som riktig AU MIDI-FX. **Fas 3 klar:** native GUI (port av prototypen) + v0.9-paritet i motorn (kryddzon, PB/MW-perf-lager, voice lead, presets), auval PASS. Se `conchord_au/README.md`. |
 | `conchord_au/prototype/` | Interaktiv HTML-prototyp av GUI:t (Claude Design-skisserna). `engine.js` = v0.9-motorn portad till rena funktioner; driver chord viewer + klaviatur live. Källa inför JUCE-editorn. Se `conchord_au/prototype/README.md`. |
 | `note_monitor_au/` | Fristående JUCE AU som visualiserar inkommande MIDI-noter. Eget projekt, byggs med Ninja. |
 | `README.md` | Användardokumentation. |
@@ -63,7 +63,11 @@ dim, dom7, voiceLead, outOfScale` m.fl. Modifierare muterar `s` innan ackordet b
 
 1. **Skala-grad:** `getScaleDegree(pitch, key, steps)` (954) mappar inputtonen till
    en grad i skalan. Utanför skalan → `Out-of-Scale Keys`-läget (Mute / Pass
-   Through / Snap to Scale / Diminished).
+   Through / Snap to Scale / Diminished / Chrom Bass). **Chrom Bass** snappar till
+   *närmaste* skalgrad för ackordets övre struktur men byter ut grundtonen mot den
+   faktiskt spelade kromatiska tonen i bas-steget (`chromBass`-flaggan) → slash-
+   ackord / kromatisk basgång (C-E-G blir C#-E-G). Övre toner (inkl. ev.
+   oktavdubblad grundton) behålls; bara den lägsta grundtons-förekomsten flyttas.
 2. **Grundackord:** stapla skalgrader (`CHORD_BASE_TYPES`, 1172) — alltid diatoniskt.
 3. **Färg:** `applyChordColor()` (969) — Sus2/Sus4/No 3 m.m.
 4. **Storlek:** `extendDegreesForNumNotes()` (993) staplar upp i oktaver till önskat antal toner.

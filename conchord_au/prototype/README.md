@@ -74,18 +74,19 @@ mål-layouten. Mappning prototyp → motor → AU-parameter (APVTS):
 | Out-of-scale | `outOfScale` | Out-of-Scale Keys | ✅ |
 | Bass Note | `bass` | Bass Note | ✅ |
 | Key / Scale | `key` / `scale` | Key / Scale | ✅ |
-| Preset | `applyPreset` | Preset | ❌ (AU saknar presets) |
-| Kryddzon-tangenter | `activeModifiers` + `ZONE_MODIFIERS` | modifier-tangenter | ❌ (AU har en `Chord Type`-param istället) |
-| Pitch- / Mod-hjul | `pb` / `mw` (+`pbTarget`/`mwTarget`/`invRange*`) | Pitch Bend / Mod Wheel | ⚠️ motorlogik finns i prototypen (`buildSettings`), saknas i AU |
-| A/B · mode-flikar · Remap | — | — | ❌ (nytt, ej i motorn) |
-| Chord viewer-namn | `detectChordName` | — | ❌ (prototyp-detektor) |
+| Preset | `applyPreset` | Preset | ✅ |
+| Kryddzon-tangenter | `activeModifiers` + `ZONE_MODIFIERS` | modifier-tangenter | ✅ (tangentzon + Chord Type behållen) |
+| Pitch- / Mod-hjul | `pb` / `mw` (+`pbTarget`/`mwTarget`/`invRange*`) | Pitch Bend / Mod Wheel | ✅ (porterat till `ChordEngine::buildSettings`) |
+| A/B · mode-flikar · Remap | — | — | ⏸ (2-FINGER/JAZZ stub; A/B & Remap parkerade) |
+| Chord viewer-namn | `detectChordName` | — | ✅ (porterad till editorn; fortfarande prototyp-detektor) |
 
-### Vad JUCE-editorn behöver utöver dagens AU
+### Status: porten är gjord (Fas 3)
 
-1. En `AudioProcessorEditor` som ritar den här layouten mot APVTS (de ✅-rader finns).
-2. För **live chord viewer + tangent-highlight**: processorn måste exponera senast
-   byggda ackordet till editorn (t.ex. atomisk snapshot / FIFO) så GUI:t kan visa
-   vad som faktiskt låter.
-3. Beslut om kryddzonen ska bli **tangentzon** (som Scripter) eller stanna som
-   `Chord Type`-parameter i AU — påverkar både motor och GUI.
-4. Parkerat tills modes-semantiken är spikad: HARP/2-FINGER/JAZZ, A/B, Remap.
+Allt ovan är nu byggt i `conchord_au/` (se dess README):
+
+1. ✅ `PluginEditor` ritar den här layouten mot APVTS i native JUCE.
+2. ✅ Processorn publicerar en trådsäker `UiState`-snapshot (SpinLock) av senast
+   byggda ackordet; editorns Timer pollar den för live chord viewer + highlight.
+3. ✅ Beslut: kryddzonen blev **tangentzon** (Scripter-paritet, Hold/Latch,
+   flyttbar via `Mod Zone Low`) **och** `Chord Type`-parametern behölls som bas.
+4. ⏸ Fortfarande parkerat: 2-FINGER/JAZZ-lägena, A/B, Remap, Humanize.

@@ -18,6 +18,12 @@
  *         ackord, och symmetriskt -> stämför snyggt ihop med Voice Lead. Storleken
  *         följer Max Chord Size (3 = dim-treklang, 4 = hel-dim7). Dim-modifiern
  *         (tvingar dim på en SKALton) finns kvar parallellt.
+ * - NYTT: Out-of-Scale Keys får läget "Chrom Bass" — en tangent utanför skalan
+ *         behåller ackordets ÖVRE struktur från närmaste skalgrad men flyttar
+ *         bara grundtonen kromatiskt till den faktiskt spelade tonen. Ger ett
+ *         slash-ackord / kromatisk basgång (C-E-G blir C#-E-G) i st f dim/snap.
+ *         Med Bass Note på läggs den kromatiska tonen dessutom en oktav under.
+ *         En enstaka melodi-/join-ton passerar igenom rått (är redan basen).
  * v0.8
  * - NYTT: Preset-meny överst — paketerade karaktärsinställningar (Harp, Piano,
  *         Pad, Pluck). Väljs ett preset pushas en knippe värden ut till de andra
