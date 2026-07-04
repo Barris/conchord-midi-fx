@@ -244,7 +244,7 @@ function buildSettings(state, activeModifiers) {
   // ===== Performance-lager (PB / MW) — speglar getSettings() i conchord_09 =====
   const invDown = state.invRangeDown == null ? 3 : state.invRangeDown;
   const invUp = state.invRangeUp == null ? 3 : state.invRangeUp;
-  const perfSizeFloor = state.maxSize <= 1 ? 1 : 2;
+  const perfSizeFloor = 1; // rak kontinuum: svepet går 1..max
 
   const mwTarget = state.mwTarget == null ? 2 : state.mwTarget; // 0 Off 1 Size 2 Inv
   const mw = state.mw == null ? -1 : state.mw;                  // -1 = orört hjul

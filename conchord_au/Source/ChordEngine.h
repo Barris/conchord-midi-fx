@@ -479,10 +479,10 @@ inline Settings buildSettings (const RawParams& r)
         for (int i = 0; i < kNumModifiers; ++i)
             if (r.modMask & (1u << i)) applyModifier (s, i, r.scale, r.borrowPairing);
 
-    // Performance-kontroller (conchord_09.js:773). Golv för size-svepen: vid
-    // Max Chord Size 1 byggs ren grundton (size 1), annars minst 2 toner.
+    // Performance-kontroller (conchord_09.js:773). Golv för size-svepen: rak
+    // kontinuum 1..max (full ner = 1 ton, full upp = Max Chord Size).
     const int invDown = r.invRangeDown, invUp = r.invRangeUp;
-    const int perfSizeFloor = r.maxSize <= 1 ? 1 : 2;
+    const int perfSizeFloor = 1;
 
     if (r.mwTarget == 1) // Mod Wheel -> Chord Size
     {

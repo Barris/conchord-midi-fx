@@ -1,62 +1,65 @@
 # ConchordAU
 
-C++/JUCE-port av conchord-Scripter-motorn (conchord_09.js) som ett riktigt AU
-MIDI-FX-plugg — nu med **egen native GUI** (Fas 3) som ritar prototypens
-interface (`prototype/index.html`) mot APVTS.
+C++/JUCE port of the conchord Scripter engine (conchord_09.js) as a real AU
+MIDI-FX plugin — now with its **own native GUI** (Phase 3) that draws the
+prototype's interface (`prototype/index.html`, the dark skin) against APVTS.
+The "Fun Light" reskin (`prototype/index-light.html`) has **not** been ported
+yet — see [DESIGN.md](../DESIGN.md).
 
-Separat target från `note_monitor_au` med avsikt: monitorn släpper igenom MIDI
-transparent (felsökningslins), Conchord *transformerar* den.
+Deliberately a separate target from `note_monitor_au`: the monitor passes MIDI
+through transparently (a debugging lens), Conchord *transforms* it.
 
-## Arkitektur
+## Architecture
 
-| Fil | Roll |
+| File | Role |
 |---|---|
-| `Source/ChordEngine.h` | Ren ackordmotor, **v0.9-paritet** med conchord_09.js. Header-only, JUCE-fri, unit-testbar. `buildSettings(RawParams)` + `buildChord()`. |
-| `Source/PluginProcessor.{h,cpp}` | MIDI-FX-motorn: referensräknad notsändning, live-morf av hållna ackord, kryddzon (Hold/Latch), Pitch Bend / Mod Wheel, voice leading, presets. Publicerar en trådsäker `UiState`-snapshot. |
-| `Source/PluginEditor.{h,cpp}` | Native editor i dark-studio-stil. Play-yta + flip-to-setup. En Timer pollar `UiState` och ritar chord viewer + tangent-highlight live. |
+| `Source/ChordEngine.h` | Pure chord engine, **v0.9 parity** with conchord_09.js. Header-only, JUCE-free, unit-testable. `buildSettings(RawParams)` + `buildChord()`. |
+| `Source/PluginProcessor.{h,cpp}` | The MIDI-FX engine: reference-counted note sending, live morph of held chords, mod zone (Hold/Latch), Pitch Bend / Mod Wheel, voice leading, presets. Publishes a thread-safe `UiState` snapshot. |
+| `Source/PluginEditor.{h,cpp}` | Native editor in dark-studio style. Play surface + flip-to-setup. A Timer polls `UiState` and draws the chord viewer + key highlight live. |
 
-`ChordEngine.h` valideras mot prototypens `engine.js` (samma logik i JS) genom
-att köra identiska scenarier i båda och diffa tonerna — håll dem i synk när
-motorn ändras (samma princip som ARCHITECTURE.md).
+`ChordEngine.h` is validated against the prototype's `engine.js` (same logic in JS)
+by running identical scenarios in both and diffing the notes — keep them in sync
+when the engine changes (same principle as ARCHITECTURE.md).
 
-## Vad som finns (v0.9-paritet)
+## What exists (v0.9 parity)
 
-- **Key / Scale** — 9 skalor (Ionian … Melodic Minor)
+- **Key / Scale** — 9 scales (Ionian … Melodic Minor)
 - **Chord Type** — Triad, 6th/7th/9th/11th/13th, Sus2, Sus4, Dom 7, Dim
-  (bas-väljare; kryddzonen lägger sig **ovanpå**)
-- **Kryddzon (Mod Zone)** — 9 tangenter från C2 (flyttbar, `Mod Zone Low`):
+  (base selector; the mod zone stacks **on top**)
+- **Mod zone** — 9 keys from C2 (movable, `Mod Zone Low`):
   Sus2 · Dim · Sus4 · 6th · 7th · Dom7 · Add9 · Parallel · Voice Lead.
-  Stackar, morfar hållna ackord live, **Hold/Latch**, subtraktiv release.
-- **Pitch Bend → Chord Size / Inversion** (Latch + Reset) och
-  **Mod Wheel → Inversion / Chord Size** (Reset) med Inversion Range ±.
-- **Voice Lead** — nästa ackord läggs närmast det förra.
+  Stacks, morphs held chords live, **Hold/Latch**, subtractive release.
+- **Pitch Bend → Chord Size / Inversion** (Latch + Reset) and
+  **Mod Wheel → Inversion / Chord Size** (Reset) with Inversion Range ±.
+- **Voice Lead** — the next chord is placed closest to the previous one.
 - **Voicing** (Close … Spread), **Inversion** (-6..+6), **Max Chord Size** (1..12)
 - **Bass Note** + **Bass / Harmony Velocity %**
-- **Strum (ms)** + **Strum Direction** (speglade note-off-delays)
+- **Strum (ms)** + **Strum Direction** (mirrored note-off delays)
 - **Out-of-Scale Keys** — Mute / Pass Through / Snap / Diminished / Chrom Bass
-- **Borrow Pairing** (Parallel-lånets tabell), **Presets** (Harp/Piano/Pad/Pluck)
-- Parametertillstånd sparas med projektet (APVTS state)
+- **Borrow Pairing** (the Parallel borrow table), **Presets** (Harp/Piano/Pad/Pluck)
+- Parameter state is saved with the project (APVTS state)
 
-GUI:t kan dessutom spela ackord direkt (klicka klaviaturen) och utföra
-PB/MW-gester med hjulen — bra för audition utan extern kontroller.
+The GUI can also play chords directly (click the keyboard) and perform
+PB/MW gestures with the wheels — handy for auditioning without an external controller.
 
-## Medvetet utelämnat (parkerat)
+## Deliberately left out (parked)
 
-- Mode-flikarna **2-FINGER / JAZZ**, A/B och **Remap** (layout-stubbar).
-- **Humanize** (to be designed) — platshållare i Chord-läget.
-- **Single Chord Mode / Free Play / Notes Join Chord** — finns i Scripter-motorn,
-  inte exponerade i den här editorn än (infrastrukturen för live-morf gör dem
-  enkla att lägga till senare).
-- Ackordnamnet i chord viewern är en preliminär detektor, inte motorlogik.
+- The mode tabs **2-FINGER / JAZZ**, A/B and **Remap** (layout stubs).
+- **Humanize** (to be designed) — placeholder in Chord mode.
+- **Single Chord Mode / Free Play / Notes Join Chord** — exist in the Scripter
+  engine, not exposed in this editor yet (the live-morph infrastructure makes
+  them easy to add later).
+- The chord name in the chord viewer is a preliminary detector, not engine logic.
+- The **Fun Light reskin** of the editor (design exists in the prototype + Figma).
 
-## Bygg (CLT + Ninja, inget Xcode)
+## Build (CLT + Ninja, no Xcode)
 
 ```sh
 cmake -G Ninja -B build-ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-ninja
 ```
 
-`COPY_PLUGIN_AFTER_BUILD` installerar automatiskt till
-`~/Library/Audio/Plug-Ins/Components/`. Validera: `auval -v aumi CnCh Cncd`.
-I Logic: MIDI FX-slot → Conchord → ConchordAU. Standalone-appen (`FORMATS …
-Standalone`) startar pluginen fristående för snabbtest.
+`COPY_PLUGIN_AFTER_BUILD` installs automatically to
+`~/Library/Audio/Plug-Ins/Components/`. Validate: `auval -v aumi CnCh Cncd`.
+In Logic: MIDI FX slot → Conchord → ConchordAU. The Standalone app (`FORMATS …
+Standalone`) launches the plugin on its own for quick testing.

@@ -783,13 +783,11 @@ function getSettings() {
   var invDown = GetParameter("Inversion Range -");
   var invUp = GetParameter("Inversion Range +");
 
-  // Golv för de perf-styrda Chord Size-svepen. Vid size 1 byggs ackordet till
-  // ren grundton FÖRE inversion -> applyInversion early-returnar (length<=1) och
-  // inversionPerf hoppas över (chord.length>1-guarden), så all inversionsrörelse
-  // tappas och basen hoppar. Vid size 2 finns minst en ton att rotera och
-  // voicingen håller ihop. Floor = 2, utom när GUI:ts Max Chord Size är 1 (då
-  // har spelaren uttryckligen valt enstaka noter).
-  var perfSizeFloor = GetParameter("Max Chord Size") <= 1 ? 1 : 2;
+  // Golv för de perf-styrda Chord Size-svepen. Svepet är en rak kontinuum 1..max:
+  // full ner = 1 ton (ren grundton), full upp = Max Chord Size. Vid size 1 tappas
+  // visserligen inversionsrörelsen (applyInversion early-returnar på length<=1),
+  // men det är väntat — spelaren har svept hela vägen ner till en enstaka ton.
+  var perfSizeFloor = 1;
 
   var mwTarget = GetParameter("Mod Wheel"); // 0=Off 1=Chord Size 2=Inversion
   if (mwTarget === 1) {
@@ -811,9 +809,9 @@ function getSettings() {
       pitchBendValue * (pitchBendValue >= 0 ? invUp : invDown),
     );
   if (pbTarget === 2) {
-    // Chord Size-slidern = MAX. Pitch bend sveper hela slaget floor..max: full
-    // ner = floor (2, eller 1 om Max Chord Size är 1), full upp = max. Bipolärt
-    // -> vila (mitten) = halva storleken. Slider 7 ger spannet 2..7.
+    // Chord Size-slidern = MAX. Pitch bend sveper hela slaget 1..max: full
+    // ner = 1 ton, full upp = max. Bipolärt -> vila (mitten) = halva storleken.
+    // Slider 7 ger spannet 1..7.
     var pbAmt = (pitchBendValue + 1) / 2; // -1..+1 -> 0..1
     s.size = Math.max(perfSizeFloor, Math.ceil(s.size * pbAmt));
   }

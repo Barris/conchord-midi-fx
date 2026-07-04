@@ -291,9 +291,9 @@ void KeyboardComponent::paint (juce::Graphics& g)
         juce::Colour base = black ? (z ? juce::Colour (0xff16493b) : juce::Colour (0xff1a1a1a))
                                    : (z ? juce::Colour (0xff0f2a22) : col::white);
         g.setColour (base); g.fillRoundedRectangle (rc, 3);
-        if (m == root)              { g.setColour (col::teal);                 g.fillRoundedRectangle (rc, 3); }
-        else if (lit.count (m))     { g.setColour (col::teal.withAlpha (0.5f)); g.fillRoundedRectangle (rc, 3); }
-        else if (ghost.count (m))   { g.setColour (col::teal.withAlpha (0.2f)); g.fillRoundedRectangle (rc, 3); }
+        if (m == root)              { g.setColour (col::amber);                g.fillRoundedRectangle (rc, 3); }
+        else if (lit.count (m))     { g.setColour (col::teal);                 g.fillRoundedRectangle (rc, 3); }
+        else if (ghost.count (m))   { g.setColour (juce::Colours::grey.withAlpha (0.35f)); g.fillRoundedRectangle (rc, 3); }
 
         if (z && (mask & (1u << (m - low))))
         { g.setColour (col::amber); g.drawRoundedRectangle (rc.reduced (1.0f), 3, 2.0f); }

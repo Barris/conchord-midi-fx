@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chordette — interaktiv prototyp</title>
+<style>
+  :root{
+    /* Conchord "Fun Light" design system — see DESIGN-SYSTEM.md */
+    --primary-dark:#e17a5f; --primary:#e88e5e; --primary-light:#f6a479;
+    --s900:#286561; --s600:#3c8580; --s400:#5dab99; --s300:#7cc3b3; --s200:#8ecfc0;
+    --n900:#3f3737; --n700:#5d5d5d; --n500:#858585; --n300:#dad4d0;
+    --n200:#e6e5e1; --n100:#eeedea; --n50:#f5f5f5; --white:#fff;
+    --warm200:#eed9ce; --warm300:#decfcc; --warm400:#ceaca0;
+    --shadow-xs:0 2px 0 0 #E1E0DD; --shadow-sm:0 5px 0 0 #E1E0DD;
+    /* JS reads these two by name when colouring keyboard labels/handles */
+    --teal:#3c8580; --amber:#e88e5e; --klabel:#858585;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:"Hanken Grotesk",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    --num:"Supreme Variable","Hanken Grotesk",ui-sans-serif,system-ui,sans-serif;
+    --brand:"Excon","Hanken Grotesk",ui-sans-serif,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--n100);font-family:var(--sans);color:var(--n700);padding:32px;display:flex;flex-direction:column;align-items:center;gap:16px}
+  .caption{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--n500);max-width:1080px;width:100%}
+  .caption b{color:var(--n700);font-weight:700}
+  .plugin{width:1080px;max-width:100%}
+  .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--n500)}
+  .faint{color:var(--n500)}
+
+  /* ---- header */
+  .hdr{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 22px}
+  .brand{display:flex;align-items:baseline;gap:10px}
+  .brand .logo{font-family:var(--brand);font-weight:800;font-size:30px;letter-spacing:-.01em;color:var(--primary-dark)}
+  .brand .byline{font-size:18px;font-weight:600;letter-spacing:-.01em;color:var(--n500)}
+  .hdr-actions{display:flex;gap:12px}
+  .ghostbtn{appearance:none;-webkit-appearance:none;background:var(--n200);border:0;border-radius:10px;color:var(--n700);font-family:var(--sans);font-weight:800;font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:11px 16px;cursor:pointer;box-shadow:var(--shadow-xs)}
+  select.ghostbtn{padding-right:32px;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%235d5d5d'/></svg>");background-repeat:no-repeat;background-position:right 13px center}
+
+  /* ---- tabs */
+  .tabs{display:flex;gap:10px;padding:0 6px 22px}
+  .tab{padding:12px 26px;border-radius:10px;background:var(--n200);color:var(--n700);font-weight:700;font-size:14px;letter-spacing:.02em;cursor:pointer;box-shadow:var(--shadow-xs)}
+  .tab.on{background:var(--s200);color:var(--s900);box-shadow:none}
+  .tab.stub{position:relative}
+  .tab.stub::after{content:"snart";position:absolute;top:-7px;right:-6px;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.06em;background:var(--n200);color:var(--primary-dark);border-radius:6px;padding:2px 5px;text-transform:uppercase}
+
+  /* ---- cards */
+  .body{display:grid;grid-template-columns:1fr 400px;gap:16px;padding:0 6px}
+  .card{background:var(--n50);border-radius:24px;box-shadow:var(--shadow-xs);padding:24px}
+  .viewer{min-height:330px;display:flex;flex-direction:column;gap:14px;position:relative}
+  .viewer-top{display:flex;justify-content:space-between;align-items:flex-start;width:100%;gap:16px}
+  .quality{font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--n700)}
+  .keyscale{cursor:pointer;font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase;color:var(--s600)}
+  .keyscale:hover{color:var(--s900)}
+  .kspop{position:absolute;top:46px;right:6px;background:var(--n50);border:1px solid var(--n300);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;z-index:20;box-shadow:0 8px 24px rgba(63,55,55,.16)}
+  .kspop .fld{display:flex;align-items:center;justify-content:space-between;gap:14px}
+  .kspop select{background:var(--n100);border:1px solid var(--n300);border-radius:8px;color:var(--n700);padding:6px 9px;font-weight:600;font-size:13px;outline:none}
+  .chordname{font-size:80px;font-weight:800;line-height:.9;margin:0;letter-spacing:-.02em;color:var(--n900)}
+  .chips{display:none}
+  .bars{display:flex;align-items:flex-end;gap:14px;height:130px;margin-top:auto}
+  .barwrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .barwrap.ghost{opacity:.4}
+  .barwrap .bar{width:16px;border-radius:4px;background:var(--s400)}
+  .barwrap .blabel{font-weight:700;font-size:13px;letter-spacing:.02em;color:var(--s600)}
+  .viewer-foot{display:flex;justify-content:space-between;align-items:flex-end}
+  .transpose{display:flex;align-items:center;gap:10px}
+  .transpose .tval{font-family:var(--num);font-weight:700;font-size:15px;letter-spacing:.03em;color:var(--s600)}
+
+  /* ---- controls */
+  .ctl{display:flex;flex-direction:column;gap:18px}
+  .ctl-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 26px}
+  .ctl-col{display:flex;flex-direction:column;gap:18px}
+  .slider.param{opacity:.85}
+  .slider.param .slabel,.slider.param .val{color:var(--n500)}
+  .slider{display:flex;flex-direction:column;gap:10px}
+  .slabel{font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--n700)}
+  .srow{display:flex;align-items:center;gap:14px}
+  .val{font-family:var(--num);font-weight:700;font-size:15px;letter-spacing:.03em;color:var(--n900);min-width:30px}
+  input[type=range]{-webkit-appearance:none;appearance:none;flex:1;width:100%;height:4px;border-radius:2px;background:var(--n300);outline:none}
+  input[type=range]:disabled{opacity:.5}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--primary);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--primary);cursor:pointer}
+  .seg{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:36px}
+  .btnsel{appearance:none;-webkit-appearance:none;background:var(--n200);border:0;border-radius:10px;color:var(--n700);font-family:var(--sans);font-weight:800;font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:9px 14px;cursor:pointer;box-shadow:var(--shadow-xs);text-align:right}
+  .tbd{font-family:var(--mono);font-size:9px;letter-spacing:.06em;background:var(--n200);color:var(--primary-dark);border-radius:5px;padding:2px 6px;margin-left:6px;text-transform:uppercase}
+  .toggle{width:46px;height:24px;border-radius:999px;background:var(--n300);position:relative;cursor:pointer;transition:.15s;flex:0 0 auto}
+  .toggle::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--white);transition:.15s}
+  .toggle.on{background:var(--primary)}
+  .toggle.on::after{left:25px}
+  .divider{height:1px;background:var(--n300);margin:2px 0}
+
+  /* ---- keyboard + wheels */
+  .kbwrap{padding:24px 6px 8px}
+  .kbrow{display:flex;gap:16px;align-items:stretch}
+  .perf{display:flex;gap:12px;flex:0 0 auto}
+  .wheel{display:flex;flex-direction:column;align-items:center;gap:8px;width:46px}
+  .wname{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--n500)}
+  .wtrack{position:relative;width:30px;flex:1;min-height:150px;background:var(--n200);border:1px solid var(--n300);border-radius:10px;cursor:ns-resize;touch-action:none}
+  .wcenter{position:absolute;left:3px;right:3px;top:50%;height:1px;background:var(--n300)}
+  .wthumb{position:absolute;left:3px;right:3px;height:16px;border-radius:6px;background:var(--primary)}
+  .wthumb.untouched{background:var(--n300)}
+  .wsub{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--primary);text-align:center;line-height:1.4}
+  .wsub .wk2{color:var(--n500);letter-spacing:.12em}
+  .wsub b{display:block;font-family:var(--num);font-size:13px;color:var(--primary)}
+  .kbcol{flex:1;min-width:0;display:flex;flex-direction:column}
+  .kb-scroll{overflow:hidden;border-radius:6px}
+  .kb{position:relative;height:160px}
+  .wk{position:absolute;bottom:0;background:var(--white);border:1px solid var(--n300);border-radius:0 0 4px 4px;cursor:pointer;box-shadow:inset 0 -5px 0 0 #E1E0DD}
+  .wk.zone{background:var(--warm200);border-color:#e3cabd;box-shadow:inset 0 -5px 0 0 var(--warm300)}
+  .bk{position:absolute;top:0;background:var(--n700);border:1px solid #4a4a4a;border-radius:0 0 4px 4px;cursor:pointer;z-index:2;box-shadow:inset 0 -4px 0 0 #474747}
+  .bk.zone{background:var(--warm400);border-color:#b58f80;box-shadow:inset 0 -4px 0 0 #b58f80}
+  /* OUTPUT = teal dot overlay (root darkest -> tone -> ghost faint). Key background
+     stays reserved for INPUT (zone tint), keeping input/output visually separate. */
+  .notedot{position:absolute;left:50%;transform:translateX(-50%);bottom:24px;width:12px;height:12px;border-radius:50%;background:transparent;pointer-events:none;z-index:5}
+  .bk .notedot{bottom:12px;width:9px;height:9px}
+  .wk.root .notedot,.bk.root .notedot,.wk.lit .notedot,.bk.lit .notedot,.wk.ghost .notedot,.bk.ghost .notedot{box-shadow:0 1px 0 0 rgba(63,55,55,.12)}
+  .wk.root .notedot,.bk.root .notedot{background:var(--s600)}
+  .wk.lit .notedot,.bk.lit .notedot{background:var(--s300)}
+  .wk.ghost .notedot,.bk.ghost .notedot{background:var(--s100)}
+  .klabel{position:absolute;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.02em;text-align:center;pointer-events:none}
+  .zonehandle{position:absolute;top:0;height:18px;background:var(--primary);border-radius:0 0 6px 6px;z-index:6;cursor:grab;display:flex;align-items:center;justify-content:center;gap:6px;overflow:hidden;color:var(--n50)}
+  .zonehandle:active{cursor:grabbing}
+  .zonehandle span{font-family:var(--mono);font-size:9px;letter-spacing:.14em;font-weight:700;white-space:nowrap}
+  .zonehandle .grip{width:8px;height:9px;background:repeating-linear-gradient(90deg,currentColor 0 1.5px,transparent 1.5px 3.5px)}
+  .kbfoot{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px}
+  .zonetoggles{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+  .ztog{display:flex;align-items:center;gap:10px}
+  .karrows{display:flex;gap:8px}
+  .karrow{width:42px;height:30px;border-radius:10px;border:0;background:var(--n200);color:var(--n700);cursor:pointer;font-size:15px;box-shadow:var(--shadow-xs)}
+  .karrow:active{transform:translateY(1px)}
+  .modnow{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--s600);min-height:14px;margin-top:14px}
+
+  /* ---- setup / config page */
+  .setup-body{display:grid;grid-template-columns:1fr 360px;gap:16px;padding:8px 6px 26px}
+  .route{background:var(--n50);border-radius:14px;box-shadow:var(--shadow-xs);padding:16px 18px;margin-bottom:14px}
+  .route-top{display:flex;align-items:center;justify-content:space-between}
+  .route-top .name{font-weight:700;font-size:17px;color:var(--n900)}
+  .pill{font-family:var(--mono);font-size:12px;font-weight:700;background:var(--s200);color:var(--s900);border-radius:10px;padding:8px 14px;border:0;cursor:pointer}
+  .pill.ghost{background:var(--n200);color:var(--n700);box-shadow:var(--shadow-xs)}
+  .route-opts{display:flex;gap:8px;margin-top:12px}
+  .map{background:var(--n50);border-radius:14px;box-shadow:var(--shadow-xs);padding:14px 16px}
+  .map-row{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:9px;margin-bottom:4px}
+  .map-row.white{background:var(--n100)}
+  .map-row .k{font-family:var(--mono);font-weight:700;color:var(--s600)}
+  .map-row.black .k{color:var(--n500)}
+  .map-row .m{font-weight:600;color:var(--n700)}
+  .stublink{cursor:pointer;color:var(--s600);font-family:var(--mono);font-size:12px;font-weight:700}
+  .flipbtn{cursor:pointer}
+  /* Båda DUO-zonerna är INDATA -> håll dem i koral-familjen (teal = utdata). */
+  .zhandle{position:absolute;top:0;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;cursor:ew-resize;z-index:5;font-family:var(--mono);font-size:9px;font-weight:700;color:var(--white);padding:0 4px;background:var(--primary);white-space:nowrap;overflow:hidden}
+  .zhandle.b{background:var(--primary-dark)}
+  .wk.zoneB{background:rgba(246,164,121,.32);border-color:#eecab4;box-shadow:inset 0 -5px 0 0 rgba(225,122,95,.28)}
+  .bk.zoneB{background:#c98e76;border-color:#b3795f;box-shadow:inset 0 -4px 0 0 #b3795f}
+  [hidden]{display:none !important}
+  .legend{max-width:1080px;width:100%;font-size:13px;color:var(--n500);line-height:1.6}
+  .legend code{font-family:var(--mono);background:var(--n200);color:var(--n700);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<div class="caption"><b>Chordette prototyp</b> &nbsp;·&nbsp; v0.9-motorn portad &nbsp;·&nbsp; "fun light"-design (DESIGN-SYSTEM.md)</div>
+
+<div class="plugin">
+
+  <section id="play">
+    <div class="hdr">
+      <div class="brand"><span class="logo">Chordette</span><span class="byline">by hyperbaric audio</span></div>
+      <div class="hdr-actions">
+        <select id="preset" class="ghostbtn"><option value="">PRESETS</option><option>Harp</option><option>Piano</option><option>Pad</option><option>Pluck</option></select>
+        <button class="ghostbtn flipbtn" id="toSetup">♪ CONFIG</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <div class="tab on" data-mode="CHORD">CHORD</div>
+      <div class="tab" data-mode="2-touch">DUO</div>
+      <div class="tab" data-mode="HARP">HARP</div>
+      <div class="tab stub" data-mode="JAZZ">JAZZ</div>
+    </div>
+
+    <div class="body">
+      <div class="card viewer">
+        <div class="viewer-top"><span class="quality" id="cdesc">MAJOR</span><span class="keyscale" id="keyscale"><span id="ksText">C IONIAN</span> ▾</span></div>
+        <div class="kspop" id="kspop" hidden>
+          <div class="fld"><span class="lbl">Key</span><select id="keySel"></select></div>
+          <div class="fld"><span class="lbl">Scale</span><select id="scaleSel"></select></div>
+        </div>
+        <div class="chordname" id="cname">C</div>
+        <div class="chips" id="chips"></div>
+        <div class="bars" id="bars"></div>
+        <div class="viewer-foot">
+          <span></span>
+          <span class="transpose"><span class="lbl">Transpose</span><span class="tval" id="vTranspose">±0</span></span>
+        </div>
+      </div>
+
+      <div class="card ctl">
+        <div class="ctl-grid">
+          <div class="ctl-col">
+            <div class="slider">
+              <span class="slabel">Max chord size</span>
+              <div class="srow"><span class="val" id="vSize">4</span><input type="range" id="size" min="1" max="8" step="1" value="4"></div>
+            </div>
+            <div class="slider">
+              <span class="slabel">Inversion</span>
+              <div class="srow"><span class="val" id="vInv">0</span><input type="range" id="inv" min="-6" max="6" step="1" value="0"></div>
+            </div>
+            <div class="slider" id="ctlHumanize">
+              <span class="slabel">Humanize</span>
+              <div class="srow"><span class="val" id="vHumanize">2.1</span><input type="range" id="humanize" min="0" max="100" step="1" value="21"></div>
+            </div>
+            <div class="slider" id="ctlStrum" hidden>
+              <span class="slabel">Strum</span>
+              <div class="srow"><span class="val" id="vStrum">0 ms</span><input type="range" id="strum" min="0" max="200" step="1" value="0"></div>
+            </div>
+          </div>
+          <div class="ctl-col">
+            <div class="slider param"><span class="slabel">Param <span class="tbd">tbd</span></span><div class="srow"><span class="val">1</span><input type="range" min="0" max="100" step="1" value="50" disabled></div></div>
+            <div class="slider param"><span class="slabel">Param <span class="tbd">tbd</span></span><div class="srow"><span class="val">1</span><input type="range" min="0" max="100" step="1" value="50" disabled></div></div>
+            <div class="slider param"><span class="slabel">Param <span class="tbd">tbd</span></span><div class="srow"><span class="val">1</span><input type="range" min="0" max="100" step="1" value="50" disabled></div></div>
+            <div class="seg"><span class="slabel">Voicing</span><select id="voicing" class="btnsel"></select></div>
+            <div class="seg"><span class="slabel">Out-of-scale</span>
+              <select id="oos" class="btnsel"><option value="0">Mute</option><option value="1">Pass</option><option value="2" selected>Snap</option><option value="3">Dim</option></select></div>
+            <div class="seg"><span class="slabel">Bass note</span><div class="toggle" id="bass" role="switch" aria-checked="false"></div></div>
+          </div>
+        </div>
+        <div id="zonePanel" hidden>
+          <div class="divider"></div>
+          <div class="seg"><span class="slabel">Layout</span>
+            <select id="zoneFlavor" class="btnsel"><option value="0">Orchid</option><option value="1">Hands</option></select></div>
+          <div class="seg"><span class="slabel">Snap to scale</span><div class="toggle" id="zoneSnap" role="switch" aria-checked="false"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kbwrap">
+      <div class="kbrow">
+        <div class="perf">
+          <div class="wheel">
+            <div class="wname">PITCH</div>
+            <div class="wtrack" id="pbtrack"><div class="wcenter"></div><div class="wthumb untouched" id="pbthumb"></div></div>
+            <div class="wsub" id="pbsub"></div>
+          </div>
+          <div class="wheel">
+            <div class="wname">MOD</div>
+            <div class="wtrack" id="mwtrack"><div class="wthumb untouched" id="mwthumb"></div></div>
+            <div class="wsub" id="mwsub"></div>
+          </div>
+        </div>
+
+        <div class="kbcol">
+          <div class="kb-scroll" id="kbscroll"><div class="kb" id="kb"></div></div>
+          <div class="kbfoot">
+            <div class="zonetoggles">
+              <div class="ztog"><div class="toggle on" id="modkeys" role="switch" aria-checked="true"></div>
+                <span class="lbl" id="zonelabel">SPICE ZONE</span></div>
+            </div>
+            <div class="karrows">
+              <button class="karrow" id="scrollL" aria-label="scrolla vänster">←</button>
+              <button class="karrow" id="scrollR" aria-label="scrolla höger">→</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modnow" id="modnow"></div>
+      <span id="modkeysLabel" hidden></span>
+    </div>
+  </section>
+
+  <section id="setup" hidden>
+    <div class="hdr">
+      <div class="brand"><span class="logo">Chordette</span><span class="byline">config</span></div>
+      <button class="pill flipbtn" id="toPlay">↩ FLIP TO PLAY</button>
+    </div>
+    <div class="setup-body">
+      <div>
+        <div class="lbl" style="margin:6px 0 12px">Performance routing</div>
+        <div class="route">
+          <div class="route-top"><span class="name">Pitch Bend</span><span class="pill">→ Chord Size</span></div>
+          <div class="route-opts"><button class="pill ghost">Latch ●</button><button class="pill ghost">Reset: Never</button></div>
+        </div>
+        <div class="route">
+          <div class="route-top"><span class="name">Mod Wheel</span><span class="pill">→ Inversion</span></div>
+          <div class="route-opts"><button class="pill ghost">Reset: On keys released</button></div>
+        </div>
+        <div class="route">
+          <div class="route-top"><span class="name">Modifier Keys</span><div class="toggle on" id="modkeys2" role="switch" aria-checked="true"></div></div>
+          <div class="route-opts"><button class="pill ghost" id="modmode">Mode: Hold</button><button class="pill ghost" id="borrow">Borrow: Major / Minor</button></div>
+        </div>
+      </div>
+      <div class="map">
+        <div class="route-top" style="margin-bottom:10px"><span class="lbl">Modifier map</span><span class="stublink">Remap ▸</span></div>
+        <div id="maplist"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="legend" id="legend"></div>
+
+<script src="engine.js"></script>
+<script>
+const C = window.Conchord;
+const $=id=>document.getElementById(id);
+const ZN = C.ZONE_MODIFIERS.length; // 9
+
+const state = {
+  key:0, scale:0, maxSize:4, inversion:0, voicing:0, humanize:21,
+  bass:false, bassVel:100, harmonyVel:100, strumMs:0, strumDir:0, outOfScale:2,
+  root:60, modifierKeys:true, modifierMode:0, borrow:0,
+  pb:null, mw:-1, pbTarget:2, mwTarget:2, invRangeDown:3, invRangeUp:3,
+  mode:"CHORD", modZoneLow:48, parkedMsg:"",
+  // 2-touch-läge: två draggbara en-oktavs-zoner (zon A lägre, zon B högre).
+  // Orchid: A=kvalitet, B=grundton. Hands: A=triad/grundton, B=ackord/kvalitet.
+  zoneFlavor:0, zoneQuality:0, zoneSnap:false, zoneRegister:0, zoneAlo:48, zoneBlo:60,
+};
+const activeModifiers = {};
+let vlAnchor = null, lastNotes = [];
+let zoneAnchorNeutral = null; // ZONE: voice-leading-ankare i register-neutral ram (utan MW-oktavskift)
+
+// ---- Mode-ägande: varje mode äger sin egen inställningsbubbla. Globala fält
+// (key/scale/borrow/root/transient) delas; allt nedan swappas vid mode-byte så
+// att t.ex. strum aldrig läcker mellan lägen.
+const MODE_OWNED = [
+  "maxSize","inversion","invRangeDown","invRangeUp","voicing","humanize","bass","bassVel",
+  "harmonyVel","strumMs","strumDir","outOfScale","modifierKeys","modifierMode",
+  "pbTarget","mwTarget","modZoneLow",
+  "zoneFlavor","zoneQuality","zoneSnap","zoneRegister","zoneAlo","zoneBlo",
+];
+function ownedSnapshot(src){ const o={}; MODE_OWNED.forEach(k=>o[k]=src[k]); return o; }
+// Startvärden per mode (karaktärisering — modes är musikaliskt särartade, inte
+// bara samma defaults). HARP = strummad/bred, 2-touch = kompakt close voicing.
+const modeStore = {
+  CHORD:     ownedSnapshot(state),
+  "2-touch": Object.assign(ownedSnapshot(state), { maxSize:3, voicing:0, strumMs:0, modifierKeys:false }),
+  HARP:      Object.assign(ownedSnapshot(state), { maxSize:7, voicing:4, strumMs:90, strumDir:0, harmonyVel:85 }),
+  JAZZ:      ownedSnapshot(state),
+};
+let currentMode = null;
+
+const vsel=$("voicing");
+C.VOICING_NAMES.forEach((v,i)=>{const o=document.createElement("option");o.value=i;o.textContent=v;vsel.appendChild(o);});
+
+// ---- Key/Scale-dropdown (klicka på "C Ionian")
+const keySel=$("keySel"), scaleSel=$("scaleSel");
+C.CHROM_SHORT.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n;keySel.appendChild(o);});
+C.SCALE_KEYS.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n;scaleSel.appendChild(o);});
+keySel.onchange=e=>{state.key=+e.target.value; render();};
+scaleSel.onchange=e=>{state.scale=+e.target.value; render();};
+$("keyscale").onclick=e=>{
+  e.stopPropagation();
+  const pop=$("kspop");
+  if(pop.hidden){ keySel.value=state.key; scaleSel.value=state.scale; pop.hidden=false; }
+  else pop.hidden=true;
+};
+$("kspop").onclick=e=>e.stopPropagation();
+document.addEventListener("click",()=>{$("kspop").hidden=true;});
+
+// ---- keyboard geometri
+const KB_LO=48, KB_HI=96, WK=40, BK=24, KH=160, BH=100;
+const whitePc=[0,2,4,5,7,9,11];
+const WHITES=(function(){let a=[];for(let m=KB_LO;m<=KB_HI;m++)if(whitePc.includes(((m%12)+12)%12))a.push(m);return a;})();
+const kb=$("kb"), kbscroll=$("kbscroll");
+function isZone(m){return state.modifierKeys && m>=state.modZoneLow && m<state.modZoneLow+ZN;}
+function whiteIndexLE(midi){let idx=0;for(let i=0;i<WHITES.length;i++){if(WHITES[i]<=midi)idx=i;else break;}return idx;}
+function oct(m){return Math.floor(m/12)-2;}
+
+function makeKey(m, white, zoneCls, left, width, height){
+  const key=document.createElement("div"); key.className=(white?"wk":"bk")+(zoneCls||"");
+  key.style.left=left+"px"; key.style.width=width+"px"; key.style.height=height+"px"; key.dataset.midi=m;
+  key.innerHTML='<i class="notedot"></i>';
+  kb.appendChild(key);
+}
+
+// ---- 2-touch geometri: två en-oktavs-zoner. Roller beror på flavor.
+function inZoneA(m){ return m>=state.zoneAlo && m<state.zoneAlo+12; }
+function inZoneB(m){ return m>=state.zoneBlo && m<state.zoneBlo+12; }
+// Vilken zon-låg är kvalitetsväljaren resp. grundtonen? Orchid: A=kvalitet, B=root. Hands: tvärtom.
+function qualLow(){ return state.zoneFlavor===0 ? state.zoneAlo : state.zoneBlo; }
+function rootLow(){ return state.zoneFlavor===0 ? state.zoneBlo : state.zoneAlo; }
+function makeLabel(left, width, bottom, color, text, boxed){
+  const lb=document.createElement("div"); lb.className="klabel";
+  lb.style.left=left+"px"; lb.style.width=width+"px"; lb.style.bottom=bottom+"px"; lb.style.color=color; lb.textContent=text;
+  if(boxed){lb.style.background="rgba(245,245,245,.95)";lb.style.borderRadius="3px";lb.style.padding="1px 2px";}
+  kb.appendChild(lb);
+}
+function buildKeyboardDOM(){
+  kb.innerHTML="";
+  kb.style.width=(WHITES.length*WK)+"px";
+  const tt=state.mode==="2-touch";
+  const orchid=state.zoneFlavor===0;
+  let wi=0;
+  for(let m=KB_LO;m<=KB_HI;m++){
+    const pc=((m%12)+12)%12, white=whitePc.includes(pc);
+    let zoneCls="";
+    if(tt){ if(inZoneA(m)) zoneCls=" zone"; else if(inZoneB(m)) zoneCls=" zoneB"; }
+    else if(isZone(m)) zoneCls=" zone";
+    const left = white ? wi*WK : wi*WK-BK/2;
+    const w = white ? WK : BK;
+    makeKey(m, white, zoneCls, left, w, white?KH:BH);
+    if(white && pc===0) makeLabel(wi*WK, WK, 6, "var(--klabel)", "C"+oct(m), false);
+    if(!tt && zoneCls){ // mod-zon-etiketter
+      if(white) makeLabel(wi*WK, WK, 6, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, false);
+      else      makeLabel(wi*WK-BK/2-7, BK+14, 66, "var(--teal)", C.ZONE_MODIFIERS[m-state.modZoneLow].short, true);
+    }
+    if(tt){ // kvalitetsetiketter på kvalitets-zonens tangenter
+      const ql=qualLow(), qi=m-ql;
+      if(qi>=0 && qi<C.ZONE_QUALITIES.length){
+        const col = (qualLow()===state.zoneAlo) ? "var(--teal)" : "var(--amber)";
+        if(white) makeLabel(wi*WK, WK, 6, col, C.ZONE_QUALITIES[qi].short, false);
+        else      makeLabel(wi*WK-BK/2-9, BK+18, 66, col, C.ZONE_QUALITIES[qi].short, true);
+      }
+    }
+    if(white) wi++;
+  }
+  if(tt){
+    // Draggbara en-oktavs-zoner, namngivna efter roll: kvalitets-zonen = SPICE ZONE,
+    // grundtons-zonen = ROOT ZONE. (Orchid: A=kvalitet, B=root; Hands: tvärtom.)
+    drawZoneHandle(state.zoneAlo, false, orchid?"SPICE ZONE":"ROOT ZONE");
+    drawZoneHandle(state.zoneBlo, true,  orchid?"ROOT ZONE":"SPICE ZONE");
+  } else if(state.modifierKeys){
+    const si=whiteIndexLE(state.modZoneLow);
+    let wc=0; for(let mm=state.modZoneLow;mm<state.modZoneLow+ZN;mm++) if(whitePc.includes(((mm%12)+12)%12)) wc++;
+    const h=document.createElement("div"); h.className="zonehandle";
+    h.style.left=(si*WK)+"px"; h.style.width=(wc*WK)+"px"; h.innerHTML="<i class='grip'></i><span>SPICE ZONE</span><i class='grip'></i>";
+    kb.appendChild(h); enableZoneDrag(h);
+  }
+}
+
+// Rita ett draggbart handtag över en en-oktavs-zon [lo, lo+11].
+function drawZoneHandle(lo, isB, label){
+  let first=-1,last=-1;
+  for(let i=0;i<WHITES.length;i++){ if(WHITES[i]>=lo && WHITES[i]<lo+12){ if(first<0)first=i; last=i; } }
+  if(first<0) return;
+  const h=document.createElement("div"); h.className="zhandle"+(isB?" b":"");
+  h.style.left=(first*WK)+"px"; h.style.width=((last-first+1)*WK)+"px"; h.textContent=label;
+  kb.appendChild(h);
+  enableTouchZoneDrag(h, isB);
+}
+
+function enableTouchZoneDrag(h, isB){
+  h.addEventListener("pointerdown",e=>{
+    e.stopPropagation(); e.preventDefault();
+    const move=ev=>{
+      const r=kb.getBoundingClientRect();
+      let idx=Math.round((ev.clientX-r.left)/WK);
+      idx=Math.max(0,Math.min(WHITES.length-1,idx));
+      let lo=WHITES[idx];
+      // SPICE- och ROOT-zonen får aldrig överlappa: håll dem minst en oktav isär,
+      // på samma sida som zonen redan låg (dra förbi = knuffas till närmaste giltiga oktav).
+      const other=state[isB?"zoneAlo":"zoneBlo"];
+      if(lo<other) lo=Math.min(lo, other-12); else lo=Math.max(lo, other+12);
+      while(lo+11>KB_HI) lo-=12; if(lo<KB_LO) lo=KB_LO;
+      const key=isB?"zoneBlo":"zoneAlo";
+      if(state[key]!==lo){ state[key]=lo; buildKeyboardDOM(); render(); }
+    };
+    const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);};
+    document.addEventListener("pointermove",move); document.addEventListener("pointerup",up);
+  });
+}
+
+function enableZoneDrag(h){
+  h.addEventListener("pointerdown",e=>{
+    e.stopPropagation(); e.preventDefault();
+    const move=ev=>{
+      const r=kb.getBoundingClientRect();
+      let idx=Math.round((ev.clientX-r.left)/WK);
+      idx=Math.max(0,Math.min(WHITES.length-1,idx));
+      let start=WHITES[idx];
+      while(start+ZN-1>KB_HI) start--;
+      if(start<KB_LO) start=KB_LO;
+      if(start!==state.modZoneLow){ state.modZoneLow=start; buildKeyboardDOM(); render(); }
+    };
+    const up=()=>{document.removeEventListener("pointermove",move);document.removeEventListener("pointerup",up);};
+    document.addEventListener("pointermove",move); document.addEventListener("pointerup",up);
+  });
+}
+
+kb.addEventListener("click",e=>{
+  const k=e.target.closest("[data-midi]"); if(!k) return;
+  const m=+k.dataset.midi;
+  if(state.mode==="2-touch"){
+    const ql=qualLow(), rl=rootLow(), qi=m-ql;
+    if(qi>=0 && qi<C.ZONE_QUALITIES.length){ state.zoneQuality=qi; }              // kvalitets-zon: välj ackord
+    else if(m>=rl && m<rl+12){ vlAnchor=zoneAnchorNeutral; state.root=m; }        // grundtons-zon: ny root (neutralt ankare)
+    render(); return;
+  }
+  if(isZone(m)){ const i=m-state.modZoneLow; if(activeModifiers[i]) delete activeModifiers[i]; else activeModifiers[i]=true; }
+  else { vlAnchor=lastNotes.map(n=>n.pitch); state.root=m; }
+  render();
+});
+$("scrollL").onclick=()=>kbscroll.scrollBy({left:-WK*7,behavior:"smooth"});
+$("scrollR").onclick=()=>kbscroll.scrollBy({left:WK*7,behavior:"smooth"});
+
+// ---- PB / MW wheels
+function dragWheel(track,thumb,kind){
+  function place(){
+    const ph=thumb.offsetHeight,H=track.clientHeight;
+    let n=kind==="pb"?(state.pb==null?0.5:(state.pb+1)/2):(state.mw<0?0:state.mw);
+    thumb.style.top=((1-n)*(H-ph))+"px";
+    thumb.classList.toggle("untouched",kind==="pb"?state.pb==null:state.mw<0);
+  }
+  function apply(clientY){
+    const r=track.getBoundingClientRect();
+    let n=1-(clientY-r.top)/r.height; n=Math.max(0,Math.min(1,n));
+    if(kind==="pb"){state.pb=Math.abs(n-0.5)<0.04?0:(n*2-1);} else {state.mw=n;}
+    place(); render();
+  }
+  track.addEventListener("pointerdown",e=>{track.setPointerCapture(e.pointerId);apply(e.clientY);});
+  track.addEventListener("pointermove",e=>{if(e.buttons)apply(e.clientY);});
+  if(kind==="pb") track.addEventListener("dblclick",()=>{state.pb=null;place();render();});
+  track._place=place; place();
+}
+dragWheel($("pbtrack"),$("pbthumb"),"pb");
+dragWheel($("mwtrack"),$("mwthumb"),"mw");
+
+// ---- modifier map (backside) — följer modZoneLow
+function renderMap(){
+  const ml=$("maplist"); ml.innerHTML="";
+  C.ZONE_MODIFIERS.forEach((z,i)=>{
+    const m=state.modZoneLow+i, white=whitePc.includes(((m%12)+12)%12);
+    const row=document.createElement("div"); row.className="map-row "+(white?"white":"black");
+    row.innerHTML='<span class="k">'+C.noteShort(m)+oct(m)+'</span><span class="m">'+z.name+'</span>';
+    ml.appendChild(row);
+  });
+}
+
+// ---- controls
+$("size").oninput=e=>{state.maxSize=+e.target.value; $("vSize").textContent=state.maxSize; render();};
+$("inv").oninput=e=>{state.inversion=+e.target.value; render();};
+$("strum").oninput=e=>{state.strumMs=+e.target.value; $("vStrum").textContent=state.strumMs+" ms"; render();};
+$("humanize").oninput=e=>{state.humanize=+e.target.value; $("vHumanize").textContent=(state.humanize/10).toFixed(1);}; // visuellt värde (motorwiring = TODO)
+$("voicing").onchange=e=>{state.voicing=+e.target.value; render();};
+$("oos").onchange=e=>{state.outOfScale=+e.target.value; render();};
+$("bass").onclick=()=>{state.bass=!state.bass; $("bass").classList.toggle("on",state.bass); render();};
+function syncModkeys(){$("modkeys").classList.toggle("on",state.modifierKeys);$("modkeys2").classList.toggle("on",state.modifierKeys);}
+function toggleModkeys(){state.modifierKeys=!state.modifierKeys; syncModkeys(); buildKeyboardDOM(); render();}
+$("modkeys").onclick=toggleModkeys;
+$("modkeys2").onclick=toggleModkeys;
+$("modmode").onclick=()=>{state.modifierMode^=1; $("modmode").textContent="Mode: "+(state.modifierMode?"Latch":"Hold");};
+$("borrow").onclick=()=>{state.borrow^=1; $("borrow").textContent="Borrow: "+(state.borrow?"Interval Mirror":"Major / Minor"); render();};
+
+// Per-mode synlighet av kontroller (specialinställningar bara där de hör hemma).
+function applyGating(mode){
+  const harp=mode==="HARP", tt=mode==="2-touch";
+  const cap = harp?12:8;
+  $("size").max=cap; if(state.maxSize>cap) state.maxSize=cap;
+  $("ctlStrum").hidden = !harp;            // strum bara i Harp
+  $("ctlHumanize").hidden = harp || tt;    // humanize göms i Harp/2-touch
+  // 2-touch: Chord Size + Inversion finns kvar i ALLA lägen. Voicing/OOS/Bass inerta -> göms.
+  $("zonePanel").hidden = !tt;
+  $("voicing").closest(".seg").hidden = tt;
+  $("oos").closest(".seg").hidden = tt;
+  $("bass").closest(".seg").hidden = tt;
+  // 2-touch har två fasta draggbara zoner -> ingen mod-zon-toggle
+  $("modkeys").style.display = tt ? "none" : "";
+  $("modkeysLabel").textContent = tt
+    ? "2-touch · SPICE ZONE + ROOT ZONE (dra för att flytta · kan ej överlappa)"
+    : "Spice zone · klick = krydda · dra handtaget = flytta";
+  state.parkedMsg=(mode==="JAZZ")?(mode+"-läge är parkerat (layout-stub)"):"";
+}
+
+// Skriv tillbaka hela state till DOM-kontrollerna (efter att ett mode laddats).
+function syncControlsFromState(){
+  $("size").value=state.maxSize; $("vSize").textContent=state.maxSize;
+  $("inv").value=state.inversion;
+  $("strum").value=state.strumMs; $("vStrum").textContent=state.strumMs+" ms";
+  $("humanize").value=state.humanize; $("vHumanize").textContent=(state.humanize/10).toFixed(1);
+  $("voicing").value=state.voicing;
+  $("oos").value=state.outOfScale;
+  $("bass").classList.toggle("on",!!state.bass);
+  syncModkeys();
+  $("modmode").textContent="Mode: "+(state.modifierMode?"Latch":"Hold");
+  $("zoneFlavor").value=state.zoneFlavor;
+  $("zoneSnap").classList.toggle("on",!!state.zoneSnap);
+  if($("pbtrack")._place) $("pbtrack")._place();   // hjul-thumbs till nollat läge
+  if($("mwtrack")._place) $("mwtrack")._place();
+  buildKeyboardDOM(); // modZoneLow/modifierKeys/zon-positioner kan ha bytts av mode-laddningen
+}
+
+function setMode(mode){
+  if(currentMode) modeStore[currentMode]=ownedSnapshot(state); // spara utgående
+  Object.assign(state, modeStore[mode]);                       // ladda inkommande
+  state.mode=mode; currentMode=mode;
+  for(const k in activeModifiers) delete activeModifiers[k];   // transient krydd-state nollas
+  vlAnchor=null; zoneAnchorNeutral=null;
+  state.pb=null; state.mw=-1;   // perf-hjulen betyder olika saker per mode -> nolla vid byte
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.mode===mode));
+  applyGating(mode);
+  syncControlsFromState();
+  render();
+}
+$("tabs").addEventListener("click",e=>{const t=e.target.closest(".tab"); if(t) setMode(t.dataset.mode);});
+
+$("preset").onchange=e=>{
+  const p=C.PRESETS[e.target.value]; if(!p) return;
+  Object.assign(state,p);
+  const cap=+$("size").max; if(state.maxSize>cap) state.maxSize=cap;
+  $("size").value=state.maxSize; $("vSize").textContent=state.maxSize;
+  $("voicing").value=state.voicing; $("bass").classList.toggle("on",!!state.bass);
+  if(state.strumMs!=null){$("strum").value=state.strumMs; $("vStrum").textContent=state.strumMs+" ms";}
+  render();
+};
+$("toSetup").onclick=()=>{$("play").hidden=true;$("setup").hidden=false;};
+$("toPlay").onclick=()=>{$("setup").hidden=true;$("play").hidden=false;};
+
+// ---- render
+function render(){
+  let active, full, descExtra=null, sActive=null, sFull=null;
+  if(state.mode==="2-touch"){
+    const scaleSteps=C.SCALE_TEMPLATES[C.SCALE_KEYS[state.scale]];
+    let root=state.root;
+    if(state.zoneSnap) root=C.snapRootToScale(root, state.key, scaleSteps);
+    const reg = state.zoneRegister = state.mw<0 ? 0 : Math.round((state.mw-0.5)*4); // MW vandrar register (±2 okt)
+    const intervals=C.ZONE_QUALITIES[state.zoneQuality].intervals;
+    // Voice-leada i register-neutral ram (reg=0) -> ankaret ackumulerar inte oktaver.
+    const neutral=C.buildZoneChord(root, intervals, 100, { harmonyVel:state.harmonyVel/100, zoneRegister:0 }, vlAnchor)||[];
+    zoneAnchorNeutral=neutral.map(n=>n.pitch);
+    active=neutral.map(n=>({ pitch:n.pitch+12*reg, velocity:n.velocity, delay:0 })).filter(n=>n.pitch>=0&&n.pitch<=127);
+    full=active;
+    descExtra = C.ZONE_QUALITIES[state.zoneQuality].name.toUpperCase();
+  } else {
+    sActive=C.buildSettings(state, activeModifiers);
+    active=C.buildChordNotes(state.root,100,sActive,null,(sActive.voiceLead?vlAnchor:null))||[];
+    sFull=C.buildSettings(Object.assign({},state,{pb:null}), activeModifiers);
+    full=C.buildChordNotes(state.root,100,sFull,null,(sFull.voiceLead?vlAnchor:null))||[];
+  }
+  lastNotes=active;
+  const activeSet=new Set(active.map(n=>n.pitch));
+  const ghostSet=new Set(full.filter(n=>!activeSet.has(n.pitch)).map(n=>n.pitch));
+
+  const nm=C.detectChordName(state.root,active);
+  $("cname").textContent=active.length?nm.name:"—";
+  $("cdesc").textContent = !active.length ? "" :
+    (state.mode==="2-touch" ? descExtra : nm.desc);
+  $("ksText").textContent=(C.CHROM_SHORT[state.key]+" "+C.SCALE_KEYS[state.scale]).toUpperCase();
+
+  const chips=$("chips"); chips.innerHTML="";
+  active.forEach(n=>{const c=document.createElement("span");c.className="chip";c.textContent=C.noteShort(n.pitch);chips.appendChild(c);});
+
+  const bars=$("bars"); bars.innerHTML="";
+  // Teal-ramp (mörk→ljus) över aktiva ackordtoner; bortgallrade toner blir bleka.
+  const ramp=["var(--s600)","var(--s400)","var(--s300)","var(--s200)","var(--s200)"];
+  let rampI=0;
+  full.forEach(n=>{
+    const on=activeSet.has(n.pitch);
+    const wrap=document.createElement("div"); wrap.className="barwrap"+(on?"":" ghost");
+    const b=document.createElement("div"); b.className="bar";
+    b.style.height=Math.max(12,Math.round(n.velocity/127*120))+"px";
+    b.style.background= on ? ramp[Math.min(rampI++,ramp.length-1)] : "var(--n300)";
+    const lb=document.createElement("div"); lb.className="blabel"; lb.textContent=C.noteShort(n.pitch)+oct(n.pitch);
+    wrap.appendChild(b); wrap.appendChild(lb); bars.appendChild(wrap);
+  });
+
+  $("vInv").textContent=(state.inversion>0?"+":"")+state.inversion;
+  if(state.mode==="2-touch"){
+    $("pbsub").innerHTML="<span class='wk2'>SIZE</span>";
+    $("mwsub").innerHTML="<span class='wk2'>REG</span><b>"+(state.zoneRegister>0?"+":"")+state.zoneRegister+"</b>";
+  } else {
+    $("pbsub").innerHTML="<span class='wk2'>SIZE</span><b>"+sActive.size+"/"+sFull.size+"</b>";
+    const off=sActive.inversionPerf; $("mwsub").innerHTML="<span class='wk2'>INV</span><b>"+(off>0?"+":"")+off+"</b>";
+  }
+
+  document.querySelectorAll(".wk,.bk").forEach(k=>{
+    const m=+k.dataset.midi; k.classList.remove("lit","root","ghost");
+    if(m===state.root) k.classList.add("root");
+    else if(activeSet.has(m)) k.classList.add("lit");
+    else if(ghostSet.has(m)) k.classList.add("ghost");
+    let outlined;
+    if(state.mode==="2-touch") outlined = (m===qualLow()+state.zoneQuality); // vald kvalitet
+    else { const i=m-state.modZoneLow; outlined = isZone(m)&&activeModifiers[i]; }
+    k.style.outline=outlined?"2px solid var(--amber)":"";
+    k.style.outlineOffset="-2px";
+  });
+
+  if(state.mode==="2-touch"){
+    const orchid=state.zoneFlavor===0;
+    $("zonelabel").textContent = orchid
+      ? "Orchid · SPICE ZONE = quality, ROOT ZONE = note (grundton)"
+      : "Hands · ROOT ZONE = triad/root, SPICE ZONE = chord/quality  [provisorisk]";
+    $("modnow").textContent="Ackord: "+C.ZONE_QUALITIES[state.zoneQuality].name+" · root "+C.noteShort(state.root)+oct(state.root)+(state.zoneSnap?" · snap":"");
+  } else {
+    $("zonelabel").textContent = state.modifierKeys
+      ? ("SPICE ZONE: "+C.noteShort(state.modZoneLow)+oct(state.modZoneLow)+"–"+C.noteShort(state.modZoneLow+ZN-1)+oct(state.modZoneLow+ZN-1))
+      : "SPICE ZONE: OFF";
+    const act=Object.keys(activeModifiers).map(Number).sort((a,b)=>a-b).map(i=>C.ZONE_MODIFIERS[i].name);
+    $("modnow").textContent=state.parkedMsg||(act.length?("Aktiva: "+act.join(" + ")):"");
+  }
+  renderMap();
+}
+
+$("legend").innerHTML=
+  "<b>Live (v0.9-motorn):</b> motorns <b>utdata</b> visas som teal-prickar ovanpå tangenterna — grundton mörk, ackordtoner ljusare, och toner som faller bort när Pitch-hjulet gallrar storleken visas som blek prick (ghost). Tangentens bakgrund är reserverad för <b>indata</b> (zonfärg), så in/ut hålls isär. Staplarna speglar samma teal-ramp. "+
+  "Spice zone: klick = krydda, dra handtaget = flytta start; stäng av med toggeln så försvinner den. <b>Chord</b> max 8 toner, <b>Harp</b> max 12 + strum.<br>"+
+  "<b>Modes äger egna inställningar</b> — byt flik och inställningar (strum m.m.) följer med respektive läge, läcker aldrig.<br>"+
+  "<b>2-touch</b>: kompakt, röstlett läge med två draggbara en-oktavs-zoner (ingen toggle). Ackordet packas i en oktav och läggs nära föregående (C→C-E-G, F→C-F-A). "+
+  "<i>Orchid</i>: SPICE ZONE (ljus koral) = kvalitet (maj/min/7…), ROOT ZONE (mörk koral) = grundton. <i>Hands</i> (provisorisk, ersätter 2-finger): ROOT ZONE = triad/grundton, SPICE ZONE = kvalitet. Zonerna kan aldrig överlappa. Mod wheel vandrar register.<br>"+
+  "<b>Stubbar:</b> Jazz-fliken, routing/Remap, Humanize. Ackordnamnet är en preliminär detektor.";
+
+// ---- 2-touch-kontroller (kvalitetsval sker på klaviaturens kvalitets-zon)
+$("zoneFlavor").onchange=e=>{ state.zoneFlavor=+e.target.value; buildKeyboardDOM(); render(); };
+$("zoneSnap").onclick=()=>{ state.zoneSnap=!state.zoneSnap; $("zoneSnap").classList.toggle("on",state.zoneSnap); render(); };
+
+buildKeyboardDOM();
+setMode("CHORD");
+</script>
+</body>
+</html>
